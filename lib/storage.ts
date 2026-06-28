@@ -59,7 +59,11 @@ export function saveEntry(entry: Omit<DailyEntry, 'id' | 'createdAt' | 'updatedA
 
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
-    return entries.find(e => e.date === today) || null;
+    const savedEntry = entries.find(e => e.date === today);
+    if (!savedEntry) {
+      throw new Error('Saved entry not found');
+    }
+    return savedEntry;
   } catch (error) {
     console.error('保存记录失败:', error);
     throw error;

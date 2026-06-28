@@ -18,6 +18,7 @@ export default function RecordPage() {
       setEntry(existing);
     } else {
       setEntry({
+        id: `draft-${today}`,
         date: today,
         diet: [],
         mood: null,
@@ -332,7 +333,7 @@ function SleepTab({ entry, setEntry }: { entry: DailyEntry; setEntry: React.Disp
   const currentSleep = entry.sleep;
 
   const updateSleep = (sleepData: Partial<SleepRecord>) => {
-    const newSleep = currentSleep
+    const newSleep: SleepRecord = currentSleep
       ? { ...currentSleep, ...sleepData }
       : { hours: 7, quality: 'good', ...sleepData };
     setEntry({ ...entry, sleep: newSleep });
@@ -401,7 +402,7 @@ function PeriodTab({ entry, setEntry }: { entry: DailyEntry; setEntry: React.Dis
   const currentPeriod = entry.period;
 
   const updatePeriod = (periodData: Partial<PeriodRecord>) => {
-    const newPeriod = currentPeriod
+    const newPeriod: PeriodRecord = currentPeriod
       ? { ...currentPeriod, ...periodData }
       : { day: 1, flow: 'medium', ...periodData };
     setEntry({ ...entry, period: newPeriod });
@@ -471,7 +472,7 @@ function ExerciseTab({ entry, setEntry }: { entry: DailyEntry; setEntry: React.D
   const currentExercise = entry.exercise;
 
   const updateExercise = (exerciseData: Partial<ExerciseRecord>) => {
-    const newExercise = currentExercise
+    const newExercise: ExerciseRecord = currentExercise
       ? { ...currentExercise, ...exerciseData }
       : { type: '', duration: 30, intensity: 'light', ...exerciseData };
     setEntry({ ...entry, exercise: newExercise });
