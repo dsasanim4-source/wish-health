@@ -1,7 +1,8 @@
 'use client';
 
-import { useMemo } from 'react';
-import { getEntries, getStats } from '@/lib/storage';
+import { useEffect, useMemo, useState } from 'react';
+import { getEntries, getStats, syncEntriesFromSupabase } from '@/lib/storage';
+import { DailyEntry } from '@/lib/types';
 import { BarChart3, TrendingUp, Calendar, Heart, Coffee, Moon, Activity, Sparkles, Shield } from 'lucide-react';
 import {
   LineChart,
@@ -19,8 +20,14 @@ import {
 } from 'recharts';
 
 export default function StatsPage() {
-  const entries = getEntries();
-  const stats = getStats();
+  const [entries, setEntries] = useState<DailyEntry[]>([]);
+
+  useEffect(() => {
+    setEntries(getEntries());
+    syncEntriesFromSupabase().then(setEntries);
+  }, []);
+
+  const stats = useMemo(() => getStats(entries), [entries]);
 
   // 焦虑趋势数据
   const anxietyTrend = useMemo(() => {

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { getEntryByDate, saveEntry, updateEntryField } from '@/lib/storage';
+import { getEntryByDate, saveEntry, syncEntriesFromSupabase } from '@/lib/storage';
 import { DailyEntry, DietRecord, MoodRecord, SleepRecord, PeriodRecord, ExerciseRecord } from '@/lib/types';
 import { Coffee, Moon, Heart, Activity, Calendar, Sparkles, Save, X, Check } from 'lucide-react';
 
@@ -13,11 +13,9 @@ export default function RecordPage() {
   const today = new Date().toISOString().split('T')[0];
 
   useEffect(() => {
-    const existing = getEntryByDate(today);
-    if (existing) {
-      setEntry(existing);
-    } else {
-      setEntry({
+    let isMounted = true;
+
+    const draftEntry = () => ({
         id: `draft-${today}`,
         date: today,
         diet: [],
@@ -29,13 +27,22 @@ export default function RecordPage() {
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       });
-    }
+
+    syncEntriesFromSupabase().then((entries) => {
+      if (!isMounted) return;
+      const existing = entries.find((item) => item.date === today) || getEntryByDate(today);
+      setEntry(existing || draftEntry());
+    });
+
+    return () => {
+      isMounted = false;
+    };
   }, [today]);
 
   if (!entry) return null;
 
   const handleSave = () => {
-    saveEntry({
+    const savedEntry = saveEntry({
       date: entry.date,
       diet: entry.diet,
       mood: entry.mood,
@@ -44,6 +51,7 @@ export default function RecordPage() {
       exercise: entry.exercise,
       gratitude: entry.gratitude,
     });
+    setEntry(savedEntry);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };

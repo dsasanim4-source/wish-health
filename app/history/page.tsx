@@ -1,16 +1,20 @@
 'use client';
 
-import { useState, useMemo } from 'react';
-import { getEntries, deleteEntry } from '@/lib/storage';
+import { useState, useMemo, useEffect } from 'react';
+import { getEntries, deleteEntry, syncEntriesFromSupabase } from '@/lib/storage';
 import { DailyEntry } from '@/lib/types';
-import { Calendar, Trash2, Search, Heart, Coffee, Moon, Smile, Activity, Sparkles } from 'lucide-react';
+import { Calendar, Trash2, Search, Heart, Coffee, Moon, Activity, Sparkles } from 'lucide-react';
 
 export default function HistoryPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState<'all' | 'diet' | 'mood' | 'sleep' | 'period' | 'exercise'>('all');
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [entries, setEntries] = useState<DailyEntry[]>([]);
 
-  const entries = getEntries();
+  useEffect(() => {
+    setEntries(getEntries());
+    syncEntriesFromSupabase().then(setEntries);
+  }, []);
 
   const filteredEntries = useMemo(() => {
     return entries.filter((entry) => {
@@ -31,9 +35,10 @@ export default function HistoryPage() {
 
   const handleDelete = (id: string) => {
     if (confirmDelete === id) {
-      deleteEntry(id);
+      if (deleteEntry(id)) {
+        setEntries((current) => current.filter((entry) => entry.id !== id));
+      }
       setConfirmDelete(null);
-      window.location.reload();
     } else {
       setConfirmDelete(id);
       setTimeout(() => setConfirmDelete(null), 3000);

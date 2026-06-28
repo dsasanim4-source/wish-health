@@ -1,13 +1,88 @@
 import { DailyEntry, DietRecord, MoodRecord, SleepRecord, PeriodRecord, ExerciseRecord } from './types';
+import { supabase } from './supabase';
 
 const STORAGE_KEY = 'warm_health_entries';
+const TABLE_NAME = 'daily_entries';
+
+type DailyEntryRow = {
+  id: string;
+  date: string;
+  diet: DietRecord[] | null;
+  mood: MoodRecord | null;
+  sleep: SleepRecord | null;
+  period: PeriodRecord | null;
+  exercise: ExerciseRecord | null;
+  gratitude: string | null;
+  created_at: string;
+  updated_at: string;
+};
 
 function generateId(): string {
-  return Date.now().toString(36) + Math.random().toString(36).substr(2, 9);
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 11);
 }
 
 function getToday(): string {
   return new Date().toISOString().split('T')[0];
+}
+
+function cacheEntries(entries: DailyEntry[]): void {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
+}
+
+function toRow(entry: DailyEntry): DailyEntryRow {
+  return {
+    id: entry.id,
+    date: entry.date,
+    diet: entry.diet,
+    mood: entry.mood,
+    sleep: entry.sleep,
+    period: entry.period,
+    exercise: entry.exercise,
+    gratitude: entry.gratitude,
+    created_at: entry.createdAt,
+    updated_at: entry.updatedAt,
+  };
+}
+
+function fromRow(row: DailyEntryRow): DailyEntry {
+  return {
+    id: row.id,
+    date: row.date,
+    diet: row.diet || [],
+    mood: row.mood,
+    sleep: row.sleep,
+    period: row.period,
+    exercise: row.exercise,
+    gratitude: row.gratitude || '',
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+async function upsertEntryToSupabase(entry: DailyEntry): Promise<void> {
+  if (!supabase) return;
+
+  const { error } = await supabase
+    .from(TABLE_NAME)
+    .upsert(toRow(entry), { onConflict: 'date' });
+
+  if (error) {
+    console.error('Supabase save failed:', error);
+  }
+}
+
+async function deleteEntryFromSupabase(id: string): Promise<void> {
+  if (!supabase) return;
+
+  const { error } = await supabase
+    .from(TABLE_NAME)
+    .delete()
+    .eq('id', id);
+
+  if (error) {
+    console.error('Supabase delete failed:', error);
+  }
 }
 
 export function getEntries(): DailyEntry[] {
@@ -17,9 +92,37 @@ export function getEntries(): DailyEntry[] {
     const data = localStorage.getItem(STORAGE_KEY);
     return data ? JSON.parse(data) : [];
   } catch (error) {
-    console.error('读取记录失败:', error);
+    console.error('Read entries failed:', error);
     return [];
   }
+}
+
+export async function syncEntriesFromSupabase(): Promise<DailyEntry[]> {
+  const localEntries = getEntries();
+
+  if (!supabase || typeof window === 'undefined') {
+    return localEntries;
+  }
+
+  const { data, error } = await supabase
+    .from(TABLE_NAME)
+    .select('*')
+    .order('date', { ascending: false });
+
+  if (error) {
+    console.error('Supabase fetch failed:', error);
+    return localEntries;
+  }
+
+  const remoteEntries = ((data || []) as DailyEntryRow[]).map(fromRow);
+
+  if (remoteEntries.length === 0 && localEntries.length > 0) {
+    await Promise.all(localEntries.map(upsertEntryToSupabase));
+    return localEntries;
+  }
+
+  cacheEntries(remoteEntries);
+  return remoteEntries;
 }
 
 export function getEntryByDate(date: string): DailyEntry | null {
@@ -29,28 +132,24 @@ export function getEntryByDate(date: string): DailyEntry | null {
 
 export function saveEntry(entry: Omit<DailyEntry, 'id' | 'createdAt' | 'updatedAt'>): DailyEntry {
   const entries = getEntries();
-  const today = getToday();
-
-  // 查找或创建今天的记录
-  const existingIndex = entries.findIndex(e => e.date === today);
-
+  const date = entry.date || getToday();
+  const existingIndex = entries.findIndex(e => e.date === date);
   const now = new Date().toISOString();
 
   if (existingIndex >= 0) {
-    // 更新现有记录
     const existing = entries[existingIndex];
     entries[existingIndex] = {
       ...existing,
       ...entry,
       id: existing.id,
+      date,
       updatedAt: now,
     };
   } else {
-    // 创建新记录
     const newEntry: DailyEntry = {
       ...entry,
       id: generateId(),
-      date: today,
+      date,
       createdAt: now,
       updatedAt: now,
     };
@@ -58,14 +157,15 @@ export function saveEntry(entry: Omit<DailyEntry, 'id' | 'createdAt' | 'updatedA
   }
 
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
-    const savedEntry = entries.find(e => e.date === today);
+    cacheEntries(entries);
+    const savedEntry = entries.find(e => e.date === date);
     if (!savedEntry) {
       throw new Error('Saved entry not found');
     }
+    void upsertEntryToSupabase(savedEntry);
     return savedEntry;
   } catch (error) {
-    console.error('保存记录失败:', error);
+    console.error('Save entry failed:', error);
     throw error;
   }
 }
@@ -99,10 +199,11 @@ export function updateEntryField<T>(field: string, value: T): DailyEntry | null 
 
   try {
     entries[index] = entry;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
+    cacheEntries(entries);
+    void upsertEntryToSupabase(entry);
     return entry;
   } catch (error) {
-    console.error('更新记录失败:', error);
+    console.error('Update entry failed:', error);
     return null;
   }
 }
@@ -116,15 +217,16 @@ export function deleteEntry(id: string): boolean {
   }
 
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(filtered));
+    cacheEntries(filtered);
+    void deleteEntryFromSupabase(id);
     return true;
   } catch (error) {
-    console.error('删除记录失败:', error);
+    console.error('Delete entry failed:', error);
     return false;
   }
 }
 
-export function getStats(): {
+export function getStats(sourceEntries?: DailyEntry[]): {
   totalDays: number;
   streak: number;
   avgAnxiety: number;
@@ -132,11 +234,9 @@ export function getStats(): {
   stomachIssues: number;
   moodDistribution: Record<string, number>;
 } {
-  const entries = getEntries();
-
+  const entries = sourceEntries || getEntries();
   const totalDays = entries.length;
 
-  // 计算连续打卡天数
   let streak = 0;
   const today = new Date();
   for (let i = 0; i < 365; i++) {
@@ -150,24 +250,20 @@ export function getStats(): {
     }
   }
 
-  // 焦虑平均值
   const moodEntries = entries.filter(e => e.mood !== null);
   const avgAnxiety = moodEntries.length > 0
     ? moodEntries.reduce((sum, e) => sum + (e.mood?.anxietyLevel || 0), 0) / moodEntries.length
     : 0;
 
-  // 睡眠平均值
   const sleepEntries = entries.filter(e => e.sleep !== null);
   const avgSleep = sleepEntries.length > 0
     ? sleepEntries.reduce((sum, e) => sum + (e.sleep?.hours || 0), 0) / sleepEntries.length
     : 0;
 
-  // 肠胃问题频率
   const stomachIssues = entries.reduce((count, e) => {
     return count + e.diet.filter(d => d.stomachFeeling === 'uncomfortable' || d.stomachFeeling === 'pain').length;
   }, 0);
 
-  // 情绪分布
   const moodDistribution: Record<string, number> = {};
   entries.forEach(e => {
     if (e.mood) {
