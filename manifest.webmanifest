@@ -7,6 +7,7 @@
   "display": "standalone",
   "background_color": "#fdf8f4",
   "theme_color": "#f4c2c2",
+  "gcm_sender_id": "103953800507",
   "icons": [
     {
       "src": "/wish-health/favicon.ico",
