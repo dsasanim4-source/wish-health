@@ -185,6 +185,17 @@ export async function adminResetPassword(userId: string): Promise<AdminUser> {
   return data as AdminUser;
 }
 
+export async function adminDeleteUser(userId: string): Promise<boolean> {
+  const client = requireSupabase();
+  const { data, error } = await client.rpc('app_admin_delete_user', {
+    p_admin_token: getAdminToken(),
+    p_user_id: userId,
+  });
+
+  if (error) throw new Error(error.message);
+  return Boolean(data);
+}
+
 export async function adminListUsers(): Promise<AdminUser[]> {
   const client = requireSupabase();
   const { data, error } = await client.rpc('app_admin_list_users', {

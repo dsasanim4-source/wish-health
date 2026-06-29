@@ -1,9 +1,10 @@
 'use client';
 
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { ChevronUp, Download, Eye, KeyRound, LogOut, Plus, Printer, RefreshCw, Shield, Users, CalendarDays } from 'lucide-react';
+import { CalendarDays, ChevronUp, Download, Eye, KeyRound, LogOut, Plus, Printer, RefreshCw, Shield, Trash2, Users } from 'lucide-react';
 import {
   adminCreateUser,
+  adminDeleteUser,
   adminListRecords,
   adminListUsers,
   adminResetPassword,
@@ -131,6 +132,30 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
     }
   };
 
+  const handleDeleteUser = async (user: AdminUser) => {
+    const display = user.display_name || user.username;
+    const confirmed = window.confirm(`确认删除用户 ${display}（${user.username}）吗？该用户的所有记录也会一起删除。`);
+    if (!confirmed) return;
+
+    setError('');
+    setMessage('');
+    setLoading(true);
+    try {
+      await adminDeleteUser(user.id);
+      setUsers((current) => current.filter((item) => item.id !== user.id));
+      setRecords((current) => current.filter((record) => record.username !== user.username));
+      setExpandedRecordIds((current) => current.filter((id) => !id.startsWith(`${user.username}-`)));
+      if (selectedUsername === user.username) {
+        setSelectedUsername(null);
+      }
+      setMessage(`已删除用户 ${user.username} 及其记录`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '删除用户失败，请先确认数据库 SQL 已更新');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const logout = () => {
     clearAuthSession();
     onLogout();
@@ -223,20 +248,28 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
                           {user.must_change_password ? ' · 仍使用初始密码' : ' · 已改密码'}
                         </div>
                       </button>
-                      <div className="flex gap-2 mt-3">
+                      <div className="grid grid-cols-3 gap-2 mt-3">
                         <button
-                          className="btn-secondary flex-1 px-3 py-2 text-xs"
+                          className="btn-secondary px-3 py-2 text-xs"
                           onClick={() => setSelectedUsername(user.username)}
                         >
                           查看
                         </button>
                         <button
-                          className="btn-secondary flex-1 px-3 py-2 text-xs flex items-center justify-center gap-1"
+                          className="btn-secondary px-3 py-2 text-xs flex items-center justify-center gap-1"
                           onClick={() => void handleResetPassword(user)}
                           disabled={loading}
                         >
                           <KeyRound className="w-3.5 h-3.5" />
                           重置
+                        </button>
+                        <button
+                          className="rounded-2xl border-2 border-blush/70 bg-white px-3 py-2 text-xs font-semibold text-blush-dark transition-all hover:bg-blush/10 disabled:cursor-not-allowed disabled:opacity-60 flex items-center justify-center gap-1"
+                          onClick={() => void handleDeleteUser(user)}
+                          disabled={loading}
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          删除
                         </button>
                       </div>
                     </div>

@@ -2,12 +2,9 @@ import type { Metadata } from "next";
 import "./globals.css";
 import AppShell from '@/components/AppShell';
 
-const basePath = process.env.GITHUB_PAGES === "true" ? "/wish-health" : "";
-
 export const metadata: Metadata = {
   title: "暖暖 - 你的健康记录小助手",
   description: "专为肠胃敏感、容易焦虑的女生设计的温柔健康记录工具",
-  manifest: `${basePath}/manifest.webmanifest`,
 };
 
 export default function RootLayout({

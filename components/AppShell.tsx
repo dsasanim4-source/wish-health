@@ -5,7 +5,6 @@ import AdminDashboard from '@/components/AdminDashboard';
 import ChangePasswordPanel from '@/components/ChangePasswordPanel';
 import LoginScreen from '@/components/LoginScreen';
 import Navbar from '@/components/Navbar';
-import ReminderCenter from '@/components/ReminderCenter';
 import { clearAuthSession, getAuthSession, type AuthSession, type UserSession } from '@/lib/auth';
 
 const ADMIN_IDLE_TIMEOUT_MS = 30 * 60 * 1000;
@@ -18,6 +17,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     syncSession();
     window.addEventListener('wish-health-auth-changed', syncSession);
     return () => window.removeEventListener('wish-health-auth-changed', syncSession);
+  }, []);
+
+  useEffect(() => {
+    void unregisterLegacyReminderWorker();
   }, []);
 
   useEffect(() => {
@@ -75,8 +78,19 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       {session.mustChangePassword && (
         <ChangePasswordPanel session={session} onChanged={updateUserSession} />
       )}
-      <ReminderCenter session={session} />
       {children}
     </>
   );
+}
+
+async function unregisterLegacyReminderWorker(): Promise<void> {
+  if (!('serviceWorker' in navigator)) return;
+
+  const basePath = window.location.pathname.startsWith('/wish-health') ? '/wish-health' : '';
+  const registration = await navigator.serviceWorker.getRegistration(`${basePath}/`);
+  if (!registration) return;
+
+  const subscription = await registration.pushManager.getSubscription().catch(() => null);
+  await subscription?.unsubscribe().catch(() => undefined);
+  await registration.unregister().catch(() => undefined);
 }

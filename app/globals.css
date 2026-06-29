@@ -172,15 +172,6 @@
     animation-delay: 180ms;
   }
 
-  .reminder-permission-card,
-  .reminder-toast {
-    animation: reminderSlideUp 520ms cubic-bezier(0.16, 1, 0.3, 1);
-  }
-
-  .reminder-toast {
-    background:
-      linear-gradient(135deg, rgba(255, 255, 255, 0.98) 0%, rgba(255, 246, 241, 0.96) 48%, rgba(245, 240, 255, 0.95) 100%);
-  }
 }
 
 @keyframes fadeIn {
@@ -263,16 +254,5 @@
   100% {
     opacity: 0;
     transform: translateY(-10px) scale(1.15) rotate(10deg);
-  }
-}
-
-@keyframes reminderSlideUp {
-  0% {
-    opacity: 0;
-    transform: translateY(18px) scale(0.97);
-  }
-  100% {
-    opacity: 1;
-    transform: translateY(0) scale(1);
   }
 }
