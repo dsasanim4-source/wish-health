@@ -51,6 +51,20 @@ create table if not exists public.daily_entries (
   updated_at timestamptz not null default now()
 );
 
+create table if not exists public.push_subscriptions (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.app_users(id) on delete cascade,
+  endpoint text not null unique,
+  p256dh text not null,
+  auth text not null,
+  user_agent text,
+  active boolean not null default true,
+  last_success_at timestamptz,
+  last_error text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 alter table public.daily_entries add column if not exists user_id uuid;
 alter table public.daily_entries add column if not exists raw_text text;
 
@@ -77,6 +91,7 @@ alter table public.app_sessions enable row level security;
 alter table public.app_admin_sessions enable row level security;
 alter table public.app_settings enable row level security;
 alter table public.daily_entries enable row level security;
+alter table public.push_subscriptions enable row level security;
 
 drop policy if exists "Allow public read daily entries" on public.daily_entries;
 drop policy if exists "Allow public insert daily entries" on public.daily_entries;
@@ -515,6 +530,81 @@ begin
   delete from public.daily_entries
   where id = p_entry_id
     and user_id = session_user_record.id;
+
+  return found;
+end;
+$$;
+
+create or replace function public.app_save_push_subscription(
+  p_session_token text,
+  p_subscription jsonb,
+  p_user_agent text default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  session_user_record public.app_users;
+  subscription_record public.push_subscriptions;
+  subscription_endpoint text := nullif(p_subscription->>'endpoint', '');
+  subscription_p256dh text := nullif(p_subscription #>> '{keys,p256dh}', '');
+  subscription_auth text := nullif(p_subscription #>> '{keys,auth}', '');
+begin
+  session_user_record := public.app_user_from_session(p_session_token);
+
+  if subscription_endpoint is null or subscription_p256dh is null or subscription_auth is null then
+    raise exception '推送订阅信息不完整';
+  end if;
+
+  insert into public.push_subscriptions (
+    user_id, endpoint, p256dh, auth, user_agent, active, last_error, updated_at
+  )
+  values (
+    session_user_record.id,
+    subscription_endpoint,
+    subscription_p256dh,
+    subscription_auth,
+    nullif(p_user_agent, ''),
+    true,
+    null,
+    now()
+  )
+  on conflict (endpoint)
+  do update set
+    user_id = excluded.user_id,
+    p256dh = excluded.p256dh,
+    auth = excluded.auth,
+    user_agent = excluded.user_agent,
+    active = true,
+    last_error = null,
+    updated_at = now()
+  returning * into subscription_record;
+
+  return to_jsonb(subscription_record);
+end;
+$$;
+
+create or replace function public.app_delete_push_subscription(
+  p_session_token text,
+  p_endpoint text
+)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  session_user_record public.app_users;
+begin
+  session_user_record := public.app_user_from_session(p_session_token);
+
+  update public.push_subscriptions
+  set active = false,
+      updated_at = now()
+  where user_id = session_user_record.id
+    and endpoint = p_endpoint;
 
   return found;
 end;

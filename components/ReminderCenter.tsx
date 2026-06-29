@@ -4,6 +4,12 @@ import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { BellRing, Clock, Utensils, X } from 'lucide-react';
 import { type UserSession } from '@/lib/auth';
+import {
+  getPushSubscriptionState,
+  isPushSupported,
+  subscribeToPushReminders,
+  unsubscribeFromPushReminders,
+} from '@/lib/push';
 
 type ReminderItem = {
   time: '08:00' | '12:00' | '18:00';
@@ -17,6 +23,7 @@ type ReminderToast = ReminderItem & {
 };
 
 type ReminderPermission = NotificationPermission | 'unsupported';
+type PushState = 'checking' | 'unsupported' | 'denied' | 'enabled' | 'available';
 
 const beijingOffsetMs = 8 * 60 * 60 * 1000;
 const reminderItems: ReminderItem[] = [
@@ -39,15 +46,22 @@ const reminderItems: ReminderItem[] = [
 
 export default function ReminderCenter({ session }: { session: UserSession }) {
   const [permission, setPermission] = useState<ReminderPermission>('unsupported');
+  const [pushState, setPushState] = useState<PushState>('checking');
   const [toast, setToast] = useState<ReminderToast | null>(null);
   const [promptHidden, setPromptHidden] = useState(false);
+  const [pushError, setPushError] = useState('');
   const userName = useMemo(() => (session.displayName || session.username).trim(), [session.displayName, session.username]);
 
   useEffect(() => {
-    void Promise.resolve().then(() => setPermission(getNotificationPermission()));
+    void Promise.resolve().then(async () => {
+      setPermission(getNotificationPermission());
+      setPushState(await getPushSubscriptionState());
+    });
   }, []);
 
   useEffect(() => {
+    if (pushState === 'enabled') return;
+
     let timeoutId: number | undefined;
 
     const scheduleNext = () => {
@@ -63,30 +77,42 @@ export default function ReminderCenter({ session }: { session: UserSession }) {
     return () => {
       if (timeoutId) window.clearTimeout(timeoutId);
     };
-  }, [userName]);
+  }, [userName, pushState]);
 
-  const requestBrowserReminder = async () => {
-    if (!('Notification' in window)) {
-      setPermission('unsupported');
-      return;
-    }
+  const requestReliablePush = async () => {
+    setPushError('');
+    try {
+      if (!isPushSupported()) {
+        setPushState('unsupported');
+        return;
+      }
 
-    const result = await Notification.requestPermission();
-    setPermission(result);
-
-    if (result === 'granted') {
+      await subscribeToPushReminders(session.token);
+      setPermission(getNotificationPermission());
+      setPushState('enabled');
       setPromptHidden(true);
       setToast({
         ...reminderItems[0],
         id: `enabled-${Date.now()}`,
-        message: `${userName}，提醒已经开启。之后在北京时间 08:00、12:00、18:00 我会提醒你好好吃饭和记录。`,
+        message: `${userName}，可靠推送已经开启。之后在北京时间 08:00、12:00、18:00 我会提醒你好好吃饭和记录。`,
       });
+    } catch (error) {
+      setPermission(getNotificationPermission());
+      setPushState(await getPushSubscriptionState());
+      setPushError(error instanceof Error ? error.message : '开启提醒失败');
     }
+  };
+
+  const closeReliablePush = async () => {
+    setPushError('');
+    await unsubscribeFromPushReminders(session.token);
+    setPushState(await getPushSubscriptionState());
+    setToast(null);
   };
 
   return (
     <>
-      {permission === 'default' && !promptHidden && (
+      {pushState !== 'enabled' && permission !== 'denied' && !promptHidden && (
         <div className="reminder-permission-card fixed bottom-24 right-4 z-[60] max-w-[calc(100vw-2rem)] rounded-2xl border border-peach/45 bg-white px-4 py-3 shadow-xl md:bottom-5 md:max-w-sm">
           <div className="flex items-start gap-3">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-peach/20 text-peach-dark">
@@ -95,11 +121,16 @@ export default function ReminderCenter({ session }: { session: UserSession }) {
             <div className="min-w-0 flex-1">
               <p className="text-sm font-bold text-text-primary">开启每日提醒</p>
               <p className="mt-0.5 text-xs leading-relaxed text-text-secondary">
-                北京时间 08:00、12:00、18:00 提醒记录和吃饭。
+                北京时间 08:00、12:00、18:00 可靠推送提醒记录和吃饭。
               </p>
+              {pushError && (
+                <p className="mt-2 rounded-xl bg-blush/10 px-3 py-2 text-xs text-blush-dark">
+                  {pushError}
+                </p>
+              )}
               <div className="mt-3 flex gap-2">
-                <button className="btn-primary px-3 py-2 text-xs" onClick={requestBrowserReminder}>
-                  开启
+                <button className="btn-primary px-3 py-2 text-xs" onClick={requestReliablePush} disabled={pushState === 'checking'}>
+                  {pushState === 'checking' ? '检查中' : '开启'}
                 </button>
                 <button className="btn-secondary px-3 py-2 text-xs" onClick={() => setPromptHidden(true)}>
                   稍后
@@ -110,6 +141,15 @@ export default function ReminderCenter({ session }: { session: UserSession }) {
               <X className="h-4 w-4" />
             </button>
           </div>
+        </div>
+      )}
+
+      {pushState === 'enabled' && !promptHidden && (
+        <div className="fixed bottom-24 right-4 z-[55] hidden rounded-full bg-sage/15 px-3 py-2 text-xs font-semibold text-sage-dark shadow-sm md:block">
+          每日可靠提醒已开启
+          <button className="ml-2 text-text-secondary hover:text-blush-dark" onClick={closeReliablePush}>
+            关闭
+          </button>
         </div>
       )}
 
