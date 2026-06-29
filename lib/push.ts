@@ -4,6 +4,7 @@ export const vapidPublicKey = 'BNvYRXIpWdVeHmGU3t5oVEWxv7n5ksSG7S7dEquuEQ9Mnt3hE
 
 export function isPushSupported(): boolean {
   return typeof window !== 'undefined'
+    && window.isSecureContext
     && 'serviceWorker' in navigator
     && 'PushManager' in window
     && 'Notification' in window;
@@ -23,8 +24,16 @@ export async function subscribeToPushReminders(sessionToken: string): Promise<Pu
     throw new Error('Supabase 尚未配置');
   }
 
+  if (typeof window !== 'undefined' && !window.isSecureContext) {
+    throw new Error('需要使用 HTTPS 安全网址打开后才能开启可靠推送');
+  }
+
   if (!isPushSupported()) {
-    throw new Error('当前浏览器不支持可靠推送');
+    throw new Error(getUnsupportedPushMessage());
+  }
+
+  if (Notification.permission === 'denied') {
+    throw new Error('浏览器通知权限已被拒绝，请在浏览器的网站设置里允许通知后再重试');
   }
 
   const permission = await Notification.requestPermission();
@@ -46,7 +55,11 @@ export async function subscribeToPushReminders(sessionToken: string): Promise<Pu
   });
 
   if (error) {
-    throw new Error(error.message);
+    await subscription.unsubscribe().catch(() => undefined);
+    if (error.message.includes('Could not find the function')) {
+      throw new Error('数据库还没有更新推送订阅函数，请先执行最新 schema.sql');
+    }
+    throw new Error(`保存推送订阅失败：${error.message}`);
   }
 
   return subscription;
@@ -72,7 +85,11 @@ async function getServiceWorkerRegistration(): Promise<ServiceWorkerRegistration
   const registration = await navigator.serviceWorker.register(`${basePath}/sw.js`, {
     scope: `${basePath}/`,
   });
-  await navigator.serviceWorker.ready;
+  await withTimeout(
+    navigator.serviceWorker.ready,
+    10_000,
+    'Service Worker 启动超时，请刷新页面后再试一次',
+  );
   return registration;
 }
 
@@ -85,4 +102,30 @@ function urlBase64ToUint8Array(value: string): Uint8Array<ArrayBuffer> {
   const base64 = `${value}${padding}`.replace(/-/g, '+').replace(/_/g, '/');
   const rawData = window.atob(base64);
   return Uint8Array.from([...rawData].map((char) => char.charCodeAt(0)));
+}
+
+function getUnsupportedPushMessage(): string {
+  const ua = navigator.userAgent.toLowerCase();
+  const isIos = /iphone|ipad|ipod/.test(ua);
+  if (isIos) {
+    return 'iPhone/iPad 需要用 Safari 把网站添加到主屏幕，再从主屏幕图标打开后开启提醒';
+  }
+
+  return '当前浏览器不支持可靠推送，请换用最新版 Chrome、Edge 或 Safari 后再试';
+}
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timeoutId = window.setTimeout(() => reject(new Error(message)), timeoutMs);
+    promise.then(
+      (value) => {
+        window.clearTimeout(timeoutId);
+        resolve(value);
+      },
+      (error) => {
+        window.clearTimeout(timeoutId);
+        reject(error);
+      },
+    );
+  });
 }

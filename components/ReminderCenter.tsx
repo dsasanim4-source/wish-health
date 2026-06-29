@@ -50,13 +50,22 @@ export default function ReminderCenter({ session }: { session: UserSession }) {
   const [toast, setToast] = useState<ReminderToast | null>(null);
   const [promptHidden, setPromptHidden] = useState(false);
   const [pushError, setPushError] = useState('');
+  const [isOpeningPush, setIsOpeningPush] = useState(false);
   const userName = useMemo(() => (session.displayName || session.username).trim(), [session.displayName, session.username]);
 
   useEffect(() => {
+    let mounted = true;
+
     void Promise.resolve().then(async () => {
+      const nextState = await readPushStateSafely();
+      if (!mounted) return;
       setPermission(getNotificationPermission());
-      setPushState(await getPushSubscriptionState());
+      setPushState(nextState);
     });
+
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   useEffect(() => {
@@ -81,9 +90,11 @@ export default function ReminderCenter({ session }: { session: UserSession }) {
 
   const requestReliablePush = async () => {
     setPushError('');
+    setIsOpeningPush(true);
     try {
       if (!isPushSupported()) {
         setPushState('unsupported');
+        setPushError(getPushStateMessage('unsupported'));
         return;
       }
 
@@ -98,21 +109,40 @@ export default function ReminderCenter({ session }: { session: UserSession }) {
       });
     } catch (error) {
       setPermission(getNotificationPermission());
-      setPushState(await getPushSubscriptionState());
-      setPushError(error instanceof Error ? error.message : '开启提醒失败');
+      const nextState = await readPushStateSafely();
+      setPushState(nextState === 'enabled' ? 'available' : nextState);
+      setPushError(getPushErrorMessage(error, nextState));
+    } finally {
+      setIsOpeningPush(false);
     }
   };
 
   const closeReliablePush = async () => {
     setPushError('');
     await unsubscribeFromPushReminders(session.token);
-    setPushState(await getPushSubscriptionState());
+    setPushState(await readPushStateSafely());
     setToast(null);
   };
 
+  const refreshReliablePush = async () => {
+    setPushError('');
+    setPushState('checking');
+    const nextState = await readPushStateSafely();
+    setPermission(getNotificationPermission());
+    setPushState(nextState);
+    if (nextState === 'unsupported' || nextState === 'denied') {
+      setPushError(getPushStateMessage(nextState));
+    }
+  };
+
+  const helperMessage = pushError || getPushStateMessage(pushState);
+  const canTryPush = pushState !== 'checking' && !isOpeningPush;
+  const primaryAction = pushState === 'unsupported' || permission === 'denied' ? refreshReliablePush : requestReliablePush;
+  const primaryLabel = getPrimaryButtonLabel(pushState, isOpeningPush);
+
   return (
     <>
-      {pushState !== 'enabled' && permission !== 'denied' && !promptHidden && (
+      {pushState !== 'enabled' && !promptHidden && (
         <div className="reminder-permission-card fixed bottom-24 right-4 z-[60] max-w-[calc(100vw-2rem)] rounded-2xl border border-peach/45 bg-white px-4 py-3 shadow-xl md:bottom-5 md:max-w-sm">
           <div className="flex items-start gap-3">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-peach/20 text-peach-dark">
@@ -123,14 +153,14 @@ export default function ReminderCenter({ session }: { session: UserSession }) {
               <p className="mt-0.5 text-xs leading-relaxed text-text-secondary">
                 北京时间 08:00、12:00、18:00 可靠推送提醒记录和吃饭。
               </p>
-              {pushError && (
-                <p className="mt-2 rounded-xl bg-blush/10 px-3 py-2 text-xs text-blush-dark">
-                  {pushError}
+              {helperMessage && (
+                <p className="mt-2 rounded-xl bg-blush/10 px-3 py-2 text-xs leading-relaxed text-blush-dark">
+                  {helperMessage}
                 </p>
               )}
               <div className="mt-3 flex gap-2">
-                <button className="btn-primary px-3 py-2 text-xs" onClick={requestReliablePush} disabled={pushState === 'checking'}>
-                  {pushState === 'checking' ? '检查中' : '开启'}
+                <button className="btn-primary px-3 py-2 text-xs" onClick={primaryAction} disabled={!canTryPush}>
+                  {primaryLabel}
                 </button>
                 <button className="btn-secondary px-3 py-2 text-xs" onClick={() => setPromptHidden(true)}>
                   稍后
@@ -221,6 +251,53 @@ function showReminder(
 function getNotificationPermission(): ReminderPermission {
   if (typeof window === 'undefined' || !('Notification' in window)) return 'unsupported';
   return Notification.permission;
+}
+
+async function readPushStateSafely(): Promise<PushState> {
+  try {
+    return await getPushSubscriptionState();
+  } catch {
+    return isPushSupported() ? 'available' : 'unsupported';
+  }
+}
+
+function getPushStateMessage(state: PushState): string {
+  if (state === 'checking') {
+    return '正在检查浏览器提醒能力，请稍等一下。';
+  }
+
+  if (state === 'unsupported') {
+    return getUnsupportedPushHint();
+  }
+
+  if (state === 'denied') {
+    return '浏览器通知权限已被拒绝，请在浏览器的网站设置里允许通知，然后刷新或点重新检查。';
+  }
+
+  return '';
+}
+
+function getPushErrorMessage(error: unknown, fallbackState: PushState): string {
+  if (error instanceof Error && error.message.trim()) {
+    return error.message;
+  }
+
+  return getPushStateMessage(fallbackState) || '开启提醒失败，请刷新页面后再试一次。';
+}
+
+function getPrimaryButtonLabel(state: PushState, isOpening: boolean): string {
+  if (isOpening) return '正在开启...';
+  if (state === 'checking') return '检查中';
+  if (state === 'unsupported' || state === 'denied') return '重新检查';
+  return '开启';
+}
+
+function getUnsupportedPushHint(): string {
+  if (typeof navigator !== 'undefined' && /iphone|ipad|ipod/i.test(navigator.userAgent)) {
+    return 'iPhone/iPad 需要用 Safari 把网站添加到主屏幕，再从主屏幕图标打开后开启提醒。';
+  }
+
+  return '当前浏览器不支持可靠推送。请换用最新版 Chrome、Edge 或 Safari，或确认正在使用 HTTPS 网站。';
 }
 
 function getNextReminder(now: Date): { item: ReminderItem; delayMs: number } {
