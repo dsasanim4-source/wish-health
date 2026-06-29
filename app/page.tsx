@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
-import { Heart, PenSquare, TrendingUp, Calendar, Sparkles, Coffee, Moon, Smile, Activity } from 'lucide-react';
+import { Heart, PenSquare, TrendingUp, Calendar, Sparkles, Coffee, Moon, Smile, Activity, Wand2 } from 'lucide-react';
 import { getEntries, getStats, syncEntriesFromSupabase } from '@/lib/storage';
 import { DailyEntry } from '@/lib/types';
 
@@ -94,7 +94,19 @@ export default function HomePage() {
         )}
 
         {/* Quick Actions */}
-        <div className="grid md:grid-cols-2 gap-4 mb-8">
+        <div className="grid md:grid-cols-3 gap-4 mb-8">
+          <Link href="/record?mode=lazy" className="card group cursor-pointer">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-2xl bg-lavender/15 flex items-center justify-center group-hover:bg-lavender/25 transition-colors">
+                <Wand2 className="w-6 h-6 text-lavender-dark" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-text-primary">懒人记录</h3>
+                <p className="text-sm text-text-secondary">一句话输入，自动归类并保存</p>
+              </div>
+            </div>
+          </Link>
+
           <Link href="/record" className="card group cursor-pointer">
             <div className="flex items-center gap-4">
               <div className="w-12 h-12 rounded-2xl bg-blush/15 flex items-center justify-center group-hover:bg-blush/25 transition-colors">
