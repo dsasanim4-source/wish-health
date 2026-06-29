@@ -67,27 +67,91 @@ export default function RecordPage() {
   if (!entry) return null;
 
   const getEncouragement = (savedEntry: DailyEntry) => {
+    const pick = (messages: string[]) => messages[Math.floor(Math.random() * messages.length)];
+    const completedSections = [
+      savedEntry.diet.length > 0,
+      Boolean(savedEntry.mood),
+      Boolean(savedEntry.sleep),
+      Boolean(savedEntry.period),
+      Boolean(savedEntry.exercise),
+      Boolean(savedEntry.gratitude.trim()),
+    ].filter(Boolean).length;
+
     const messages = [
       '你又认真照顾了自己一次，这件小事很珍贵。',
       '谢谢你把今天交给记录，慢慢来已经很好了。',
       '今天的你也在努力生活，给自己一点温柔的掌声。',
       '记录不是打分，是陪你看见自己。你做得很好。',
       '又完成一次健康记录，身体会记得这份耐心。',
+      '完成了，今天的自己被好好看见了一次。',
+      '这一笔记录很轻，但它是在认真照顾未来的你。',
+      '你没有忽略自己的状态，这已经是很棒的开始。',
+      '今天又多了一点线索，照顾自己会越来越有方向。',
+      '谢谢你愿意停下来听听身体和心里的声音。',
+      '记录完成，今天也给自己留了一盏小灯。',
+      '你正在把生活里零散的感受整理成可以被照顾的线索。',
+      '这一分钟没有白花，它是在帮你更懂自己。',
+      '做得很好，稳定的小动作最有力量。',
+      '今天的记录已经收好，你可以轻轻松一口气了。',
     ];
 
     if (savedEntry.sleep && savedEntry.sleep.hours < 6) {
-      return '今天睡得有点少，已经记录下来了，今晚尽量早点休息，好好把电充回来。';
+      return pick([
+        '今天睡得有点少，已经记录下来了，今晚尽量早点休息，好好把电充回来。',
+        '能把睡眠不足记录下来很重要，身体的提醒已经被你接住了。',
+        '今天先不责备自己，知道睡少了就是下一次照顾自己的起点。',
+      ]);
     }
 
     if (savedEntry.mood && savedEntry.mood.anxietyLevel >= 4) {
-      return '焦虑被看见以后，就不再是一个人扛着它了。先慢慢呼吸，你已经做得很棒。';
+      return pick([
+        '焦虑被看见以后，就不再是一个人扛着它了。先慢慢呼吸，你已经做得很棒。',
+        '你把高焦虑诚实记下来了，这不是脆弱，是在认真保护自己。',
+        '今天情绪很重，但你仍然完成了记录，这一步很值得肯定。',
+      ]);
     }
 
     if (savedEntry.diet.some((item) => item.stomachFeeling === 'pain' || item.stomachFeeling === 'uncomfortable')) {
-      return '肠胃不舒服也被认真记下来了，接下来给自己一点清淡和温热。';
+      return pick([
+        '肠胃不舒服也被认真记下来了，接下来给自己一点清淡和温热。',
+        '你已经捕捉到身体的小信号了，之后会更容易找到舒服的节奏。',
+        '不舒服不是麻烦，是身体在说话；你今天有认真听见它。',
+      ]);
     }
 
-    return messages[Math.floor(Math.random() * messages.length)];
+    if (completedSections >= 4) {
+      return pick([
+        '今天记录得很完整，身体、情绪和生活都被温柔地照顾到了。',
+        '这一条记录信息很丰富，之后回看时会特别有帮助。',
+        '你把今天整理得很清楚，这种认真本身就很了不起。',
+      ]);
+    }
+
+    if (savedEntry.exercise) {
+      return pick([
+        '运动也记录好了，哪怕只是动一动，身体都会收到这份善意。',
+        '今天的活动被记下来了，给坚持照顾身体的自己点个头。',
+        '你把运动这件事落到了记录里，很棒，节奏正在慢慢建立。',
+      ]);
+    }
+
+    if (savedEntry.gratitude.trim()) {
+      return pick([
+        '今天的温暖小事已经收好，愿它在你需要的时候再亮一下。',
+        '能记下一点感恩，说明你还在生活里认真寻找光。',
+        '谢谢你把今天值得珍惜的部分留下来了。',
+      ]);
+    }
+
+    if (savedEntry.rawText?.trim()) {
+      return pick([
+        '懒人模式也完成得很好，想到什么就先记下来，本来就是一种照顾。',
+        '你用最省力的方式完成了记录，这很聪明，也很温柔。',
+        '原文已经保存好，今天的状态没有被弄丢。',
+      ]);
+    }
+
+    return pick(messages);
   };
 
   const persistEntry = (targetEntry: DailyEntry) => {
