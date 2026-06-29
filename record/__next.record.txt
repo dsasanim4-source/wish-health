@@ -1,5 +1,5 @@
 1:"$Sreact.fragment"
-2:I[39756,["/wish-health/_next/static/chunks/3nv-beis0-vqc.js","/wish-health/_next/static/chunks/424z57-2b2o2e.js","/wish-health/_next/static/chunks/1-8s9_t85wwr4.js"],"default"]
-3:I[37457,["/wish-health/_next/static/chunks/3nv-beis0-vqc.js","/wish-health/_next/static/chunks/424z57-2b2o2e.js","/wish-health/_next/static/chunks/1-8s9_t85wwr4.js"],"default"]
+2:I[39756,["/wish-health/_next/static/chunks/3nv-beis0-vqc.js","/wish-health/_next/static/chunks/1jzpajtn130ru.js","/wish-health/_next/static/chunks/1-8s9_t85wwr4.js"],"default"]
+3:I[37457,["/wish-health/_next/static/chunks/3nv-beis0-vqc.js","/wish-health/_next/static/chunks/1jzpajtn130ru.js","/wish-health/_next/static/chunks/1-8s9_t85wwr4.js"],"default"]
 4:[]
-0:{"rsc":["$","$1","c",{"children":[null,["$","$L2",null,{"parallelRouterKey":"children","template":["$","$L3",null,{}]}]]}],"isPartial":false,"staleTime":300,"varyParams":"$W4","buildId":"Qms7w9OLctsNvBTCv0L1h"}
+0:{"rsc":["$","$1","c",{"children":[null,["$","$L2",null,{"parallelRouterKey":"children","template":["$","$L3",null,{}]}]]}],"isPartial":false,"staleTime":300,"varyParams":"$W4","buildId":"bjHgZxzcObp7S4CnBGSpC"}
