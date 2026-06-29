@@ -93,7 +93,8 @@ export default function RecordPage() {
 
   const getEncouragement = (savedEntry: DailyEntry, style: EncouragementStyle) => {
     const pick = (messages: string[]) => messages[Math.floor(Math.random() * messages.length)];
-    const styled = (kind: EncouragementKind) => pick(encouragementMessages[style][kind]);
+    const userName = getCurrentUserName();
+    const styled = (kind: EncouragementKind) => withUserName(pick(encouragementMessages[style][kind]), userName);
     const completedSections = [
       savedEntry.diet.length > 0,
       Boolean(savedEntry.mood),
@@ -392,6 +393,17 @@ function writeDraftEntry(date: string, entry: DailyEntry): void {
 function removeDraftEntry(date: string): void {
   if (typeof window === 'undefined') return;
   localStorage.removeItem(draftStorageKey(date));
+}
+
+function getCurrentUserName(): string {
+  const session = getAuthSession();
+  if (session?.mode !== 'user') return '';
+  return (session.displayName || session.username).trim();
+}
+
+function withUserName(message: string, userName: string): string {
+  if (!userName) return message;
+  return `${userName}，${message}`;
 }
 
 // 饮食记录
