@@ -2,13 +2,16 @@
 
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
-import { Heart, PenSquare, TrendingUp, Calendar, Sparkles, Coffee, Moon, Smile, Activity, Wand2 } from 'lucide-react';
+import { Heart, PenSquare, TrendingUp, Calendar, Sparkles, Coffee, Moon, Smile, Activity, Wand2, Award, Bell } from 'lucide-react';
 import { getEntries, getStats, syncEntriesFromSupabase } from '@/lib/storage';
 import { DailyEntry } from '@/lib/types';
+import { buildHealthAlerts, buildStreakMessage, buildWeeklySummary } from '@/lib/insights';
 
 export default function HomePage() {
   const [entries, setEntries] = useState<DailyEntry[]>(() => getEntries());
   const stats = useMemo(() => getStats(entries), [entries]);
+  const weeklySummary = useMemo(() => buildWeeklySummary(entries), [entries]);
+  const alerts = useMemo(() => buildHealthAlerts(entries), [entries]);
 
   useEffect(() => {
     syncEntriesFromSupabase().then(setEntries);
@@ -41,11 +44,32 @@ export default function HomePage() {
           <h1 className="text-2xl font-bold text-text-primary mb-1">{greeting}</h1>
           <p className="text-text-secondary text-sm">
             {stats.totalDays > 0
-              ? `你已经记录了 ${stats.totalDays} 天，连续打卡 ${stats.streak} 天啦！`
+              ? buildStreakMessage(stats.totalDays, stats.streak)
               : '今天还没有记录哦，来记录一下吧~'
             }
           </p>
         </div>
+
+        {stats.totalDays > 0 && (
+          <div className="grid md:grid-cols-[1.4fr_1fr] gap-4 mb-8">
+            <section className="card">
+              <h2 className="font-semibold text-text-primary mb-3 flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-peach" />
+                本周温柔总结
+              </h2>
+              <p className="text-sm text-text-secondary leading-relaxed">{weeklySummary}</p>
+            </section>
+
+            <section className="card">
+              <h2 className="font-semibold text-text-primary mb-3 flex items-center gap-2">
+                <Award className="w-5 h-5 text-lavender-dark" />
+                小成就
+              </h2>
+              <p className="text-2xl font-bold text-text-primary">{stats.streak}<span className="text-sm font-normal text-text-secondary"> 天</span></p>
+              <p className="text-sm text-text-secondary mt-1">连续陪自己记录</p>
+            </section>
+          </div>
+        )}
 
         {/* Quick Stats */}
         {stats.totalDays > 0 && (
@@ -89,6 +113,22 @@ export default function HomePage() {
                 {stats.totalDays}
                 <span className="text-sm font-normal text-text-secondary">天</span>
               </p>
+            </div>
+          </div>
+        )}
+
+        {stats.totalDays > 0 && alerts.length > 0 && (
+          <div className="card mb-8">
+            <h3 className="font-semibold text-text-primary mb-3 flex items-center gap-2">
+              <Bell className="w-5 h-5 text-sage-dark" />
+              最近提醒
+            </h3>
+            <div className="space-y-2">
+              {alerts.map((alert) => (
+                <div key={alert} className="rounded-xl bg-warm-beige/45 px-3 py-2 text-sm text-text-secondary">
+                  {alert}
+                </div>
+              ))}
             </div>
           </div>
         )}

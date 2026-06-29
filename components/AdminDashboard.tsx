@@ -1,15 +1,18 @@
 'use client';
 
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { ChevronUp, Eye, LogOut, Plus, RefreshCw, Shield, Users, CalendarDays } from 'lucide-react';
+import { ChevronUp, Download, Eye, KeyRound, LogOut, Plus, Printer, RefreshCw, Shield, Users, CalendarDays } from 'lucide-react';
 import {
   adminCreateUser,
   adminListRecords,
   adminListUsers,
+  adminResetPassword,
   clearAuthSession,
   type AdminRecord,
   type AdminUser,
 } from '@/lib/auth';
+import { buildWeeklySummary, downloadEntriesCsv, openPrintableReport } from '@/lib/insights';
+import { DailyEntry } from '@/lib/types';
 
 export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
   const [users, setUsers] = useState<AdminUser[]>([]);
@@ -21,6 +24,7 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
   const [loading, setLoading] = useState(false);
   const [filter, setFilter] = useState('');
   const [expandedRecordIds, setExpandedRecordIds] = useState<string[]>([]);
+  const [selectedUsername, setSelectedUsername] = useState<string | null>(null);
 
   const loadData = async () => {
     setError('');
@@ -43,10 +47,15 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
     void Promise.resolve().then(loadData);
   }, []);
 
+  const scopedRecords = useMemo(() => {
+    if (!selectedUsername) return records;
+    return records.filter((record) => record.username === selectedUsername);
+  }, [records, selectedUsername]);
+
   const filteredRecords = useMemo(() => {
     const keyword = filter.trim().toLowerCase();
-    if (!keyword) return records;
-    return records.filter((record) => {
+    if (!keyword) return scopedRecords;
+    return scopedRecords.filter((record) => {
       const searchable = [
         record.username,
         record.display_name || '',
@@ -62,7 +71,20 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
 
       return searchable.includes(keyword);
     });
-  }, [records, filter]);
+  }, [scopedRecords, filter]);
+
+  const selectedUser = useMemo(() => {
+    if (!selectedUsername) return null;
+    return users.find((user) => user.username === selectedUsername) || null;
+  }, [selectedUsername, users]);
+
+  const selectedDailyEntries = useMemo(() => {
+    return filteredRecords.map(adminRecordToDailyEntry);
+  }, [filteredRecords]);
+
+  const selectedSummary = useMemo(() => {
+    return buildWeeklySummary(selectedDailyEntries);
+  }, [selectedDailyEntries]);
 
   const toggleRecord = (recordId: string) => {
     setExpandedRecordIds((current) => (
@@ -94,6 +116,21 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
     }
   };
 
+  const handleResetPassword = async (user: AdminUser) => {
+    setError('');
+    setMessage('');
+    setLoading(true);
+    try {
+      const updated = await adminResetPassword(user.id);
+      setUsers((current) => current.map((item) => item.id === updated.id ? updated : item));
+      setMessage(`已将 ${updated.username} 的密码重置为 123456`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '重置密码失败，请先确认数据库 SQL 已更新');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const logout = () => {
     clearAuthSession();
     onLogout();
@@ -109,7 +146,7 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
             </div>
             <div>
               <h1 className="text-2xl font-bold text-text-primary">管理员模式</h1>
-              <p className="text-sm text-text-secondary">管理用户，并查看所有健康记录</p>
+              <p className="text-sm text-text-secondary">管理用户与账号状态</p>
             </div>
           </div>
 
@@ -164,15 +201,43 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
                 用户列表
               </h2>
               <div className="space-y-2">
+                <button
+                  className={`w-full text-left p-3 rounded-xl transition-colors ${selectedUsername === null ? 'bg-lavender/15 text-lavender-dark' : 'bg-warm-beige/40 text-text-secondary hover:bg-warm-beige/70'}`}
+                  onClick={() => setSelectedUsername(null)}
+                >
+                  <div className="font-medium">全部用户</div>
+                  <div className="text-xs">显示所有记录</div>
+                </button>
                 {users.length === 0 ? (
                   <p className="text-sm text-text-secondary">暂无用户</p>
                 ) : (
                   users.map((user) => (
-                    <div key={user.id} className="p-3 rounded-xl bg-warm-beige/40">
-                      <div className="font-medium text-text-primary">{user.username}</div>
-                      <div className="text-xs text-text-secondary">
-                        {user.display_name || '未设置显示名'}
-                        {user.must_change_password ? ' · 仍使用初始密码' : ' · 已改密码'}
+                    <div
+                      key={user.id}
+                      className={`p-3 rounded-xl ${selectedUsername === user.username ? 'bg-lavender/15' : 'bg-warm-beige/40'}`}
+                    >
+                      <button className="w-full text-left" onClick={() => setSelectedUsername(user.username)}>
+                        <div className="font-medium text-text-primary">{user.username}</div>
+                        <div className="text-xs text-text-secondary">
+                          {user.display_name || '未设置显示名'}
+                          {user.must_change_password ? ' · 仍使用初始密码' : ' · 已改密码'}
+                        </div>
+                      </button>
+                      <div className="flex gap-2 mt-3">
+                        <button
+                          className="btn-secondary flex-1 px-3 py-2 text-xs"
+                          onClick={() => setSelectedUsername(user.username)}
+                        >
+                          查看
+                        </button>
+                        <button
+                          className="btn-secondary flex-1 px-3 py-2 text-xs flex items-center justify-center gap-1"
+                          onClick={() => void handleResetPassword(user)}
+                          disabled={loading}
+                        >
+                          <KeyRound className="w-3.5 h-3.5" />
+                          重置
+                        </button>
                       </div>
                     </div>
                   ))
@@ -183,17 +248,44 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
 
           <section className="card">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-4">
-              <h2 className="font-semibold text-text-primary flex items-center gap-2">
-                <CalendarDays className="w-5 h-5 text-sage-dark" />
-                用户记录
-              </h2>
-              <input
-                className="input-field md:max-w-xs"
-                value={filter}
-                onChange={(event) => setFilter(event.target.value)}
-                placeholder="搜索用户名、日期或感恩记录"
-              />
+              <div>
+                <h2 className="font-semibold text-text-primary flex items-center gap-2">
+                  <CalendarDays className="w-5 h-5 text-sage-dark" />
+                  {selectedUser ? `${selectedUser.display_name || selectedUser.username} 的记录` : '用户记录'}
+                </h2>
+                <p className="text-xs text-text-secondary mt-1">
+                  当前显示 {filteredRecords.length} 条
+                </p>
+              </div>
+              <div className="flex flex-col md:flex-row gap-2">
+                <button
+                  className="btn-secondary flex items-center justify-center gap-2 px-3 py-2 text-sm"
+                  onClick={() => downloadEntriesCsv(selectedDailyEntries, selectedUsername ? `${selectedUsername}-records.csv` : 'admin-records.csv')}
+                >
+                  <Download className="w-4 h-4" />
+                  CSV
+                </button>
+                <button
+                  className="btn-secondary flex items-center justify-center gap-2 px-3 py-2 text-sm"
+                  onClick={() => openPrintableReport(selectedDailyEntries, selectedUsername ? `${selectedUsername} 健康记录` : '用户健康记录')}
+                >
+                  <Printer className="w-4 h-4" />
+                  PDF
+                </button>
+                <input
+                  className="input-field md:max-w-xs"
+                  value={filter}
+                  onChange={(event) => setFilter(event.target.value)}
+                  placeholder="搜索用户名、日期或感恩记录"
+                />
+              </div>
             </div>
+
+            {selectedUsername && (
+              <div className="mb-4 rounded-xl bg-sage/10 px-4 py-3 text-sm text-text-secondary">
+                {selectedSummary}
+              </div>
+            )}
 
             <div className="space-y-3">
               {filteredRecords.length === 0 ? (
@@ -352,6 +444,22 @@ function DetailSection({ title, children }: { title: string; children: ReactNode
 
 function EmptyDetail() {
   return <span className="text-text-secondary">未记录</span>;
+}
+
+function adminRecordToDailyEntry(record: AdminRecord): DailyEntry {
+  return {
+    id: record.id,
+    date: record.date,
+    diet: Array.isArray(record.diet) ? record.diet as unknown as DailyEntry['diet'] : [],
+    mood: isObject(record.mood) ? record.mood as unknown as DailyEntry['mood'] : null,
+    sleep: isObject(record.sleep) ? record.sleep as unknown as DailyEntry['sleep'] : null,
+    period: isObject(record.period) ? record.period as unknown as DailyEntry['period'] : null,
+    exercise: isObject(record.exercise) ? record.exercise as unknown as DailyEntry['exercise'] : null,
+    gratitude: record.gratitude || '',
+    rawText: record.raw_text || undefined,
+    createdAt: record.created_at,
+    updatedAt: record.updated_at,
+  };
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {

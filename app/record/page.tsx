@@ -3,7 +3,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { getEntries, getEntryByDate, saveEntry, syncEntriesFromSupabase } from '@/lib/storage';
 import { DailyEntry, DietRecord, MoodRecord, SleepRecord, PeriodRecord, ExerciseRecord } from '@/lib/types';
-import { Coffee, Moon, Heart, Activity, Calendar, Sparkles, Save, X, Check, Mic, MicOff, Wand2 } from 'lucide-react';
+import { getAuthSession } from '@/lib/auth';
+import { encouragementStyles, getEncouragementStyle, saveEncouragementStyle, type EncouragementStyle } from '@/lib/insights';
+import { Coffee, Moon, Heart, Activity, Calendar, Sparkles, Save, X, Check, Mic, MicOff, Wand2, SlidersHorizontal } from 'lucide-react';
 
 type SpeechResultAlternative = { transcript: string };
 type SpeechResult = { 0: SpeechResultAlternative };
@@ -27,8 +29,15 @@ export default function RecordPage() {
   const [saved, setSaved] = useState(false);
   const [encouragement, setEncouragement] = useState('');
   const [lazyMode, setLazyMode] = useState(false);
+  const [encouragementStyle, setEncouragementStyle] = useState<EncouragementStyle>('gentle');
+  const [draftDirty, setDraftDirty] = useState(false);
+  const [draftNotice, setDraftNotice] = useState('');
 
   const today = new Date().toISOString().split('T')[0];
+
+  useEffect(() => {
+    void Promise.resolve().then(() => setEncouragementStyle(getEncouragementStyle()));
+  }, []);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -56,7 +65,12 @@ export default function RecordPage() {
     syncEntriesFromSupabase().then((entries) => {
       if (!isMounted) return;
       const existing = entries.find((item) => item.date === today) || getEntryByDate(today);
-      setEntry(existing || draftEntry());
+      const draft = readDraftEntry(today);
+      setEntry(draft || existing || draftEntry());
+      if (draft) {
+        setDraftDirty(true);
+        setDraftNotice('已恢复上次未保存的草稿。');
+      }
     });
 
     return () => {
@@ -64,10 +78,22 @@ export default function RecordPage() {
     };
   }, [today]);
 
+  useEffect(() => {
+    if (!entry || !draftDirty) return;
+    writeDraftEntry(today, entry);
+    void Promise.resolve().then(() => setDraftNotice('草稿已自动保存。'));
+  }, [entry, draftDirty, today]);
+
   if (!entry) return null;
 
-  const getEncouragement = (savedEntry: DailyEntry) => {
+  const updateEntry: React.Dispatch<React.SetStateAction<DailyEntry | null>> = (nextEntry) => {
+    setDraftDirty(true);
+    setEntry(nextEntry);
+  };
+
+  const getEncouragement = (savedEntry: DailyEntry, style: EncouragementStyle) => {
     const pick = (messages: string[]) => messages[Math.floor(Math.random() * messages.length)];
+    const styled = (kind: EncouragementKind) => pick(encouragementMessages[style][kind]);
     const completedSections = [
       savedEntry.diet.length > 0,
       Boolean(savedEntry.mood),
@@ -77,81 +103,35 @@ export default function RecordPage() {
       Boolean(savedEntry.gratitude.trim()),
     ].filter(Boolean).length;
 
-    const messages = [
-      '你又认真照顾了自己一次，这件小事很珍贵。',
-      '谢谢你把今天交给记录，慢慢来已经很好了。',
-      '今天的你也在努力生活，给自己一点温柔的掌声。',
-      '记录不是打分，是陪你看见自己。你做得很好。',
-      '又完成一次健康记录，身体会记得这份耐心。',
-      '完成了，今天的自己被好好看见了一次。',
-      '这一笔记录很轻，但它是在认真照顾未来的你。',
-      '你没有忽略自己的状态，这已经是很棒的开始。',
-      '今天又多了一点线索，照顾自己会越来越有方向。',
-      '谢谢你愿意停下来听听身体和心里的声音。',
-      '记录完成，今天也给自己留了一盏小灯。',
-      '你正在把生活里零散的感受整理成可以被照顾的线索。',
-      '这一分钟没有白花，它是在帮你更懂自己。',
-      '做得很好，稳定的小动作最有力量。',
-      '今天的记录已经收好，你可以轻轻松一口气了。',
-    ];
-
     if (savedEntry.sleep && savedEntry.sleep.hours < 6) {
-      return pick([
-        '今天睡得有点少，已经记录下来了，今晚尽量早点休息，好好把电充回来。',
-        '能把睡眠不足记录下来很重要，身体的提醒已经被你接住了。',
-        '今天先不责备自己，知道睡少了就是下一次照顾自己的起点。',
-      ]);
+      return styled('lowSleep');
     }
 
     if (savedEntry.mood && savedEntry.mood.anxietyLevel >= 4) {
-      return pick([
-        '焦虑被看见以后，就不再是一个人扛着它了。先慢慢呼吸，你已经做得很棒。',
-        '你把高焦虑诚实记下来了，这不是脆弱，是在认真保护自己。',
-        '今天情绪很重，但你仍然完成了记录，这一步很值得肯定。',
-      ]);
+      return styled('highAnxiety');
     }
 
     if (savedEntry.diet.some((item) => item.stomachFeeling === 'pain' || item.stomachFeeling === 'uncomfortable')) {
-      return pick([
-        '肠胃不舒服也被认真记下来了，接下来给自己一点清淡和温热。',
-        '你已经捕捉到身体的小信号了，之后会更容易找到舒服的节奏。',
-        '不舒服不是麻烦，是身体在说话；你今天有认真听见它。',
-      ]);
+      return styled('stomach');
     }
 
     if (completedSections >= 4) {
-      return pick([
-        '今天记录得很完整，身体、情绪和生活都被温柔地照顾到了。',
-        '这一条记录信息很丰富，之后回看时会特别有帮助。',
-        '你把今天整理得很清楚，这种认真本身就很了不起。',
-      ]);
+      return styled('complete');
     }
 
     if (savedEntry.exercise) {
-      return pick([
-        '运动也记录好了，哪怕只是动一动，身体都会收到这份善意。',
-        '今天的活动被记下来了，给坚持照顾身体的自己点个头。',
-        '你把运动这件事落到了记录里，很棒，节奏正在慢慢建立。',
-      ]);
+      return styled('exercise');
     }
 
     if (savedEntry.gratitude.trim()) {
-      return pick([
-        '今天的温暖小事已经收好，愿它在你需要的时候再亮一下。',
-        '能记下一点感恩，说明你还在生活里认真寻找光。',
-        '谢谢你把今天值得珍惜的部分留下来了。',
-      ]);
+      return styled('gratitude');
     }
 
     if (savedEntry.rawText?.trim()) {
-      return pick([
-        '懒人模式也完成得很好，想到什么就先记下来，本来就是一种照顾。',
-        '你用最省力的方式完成了记录，这很聪明，也很温柔。',
-        '原文已经保存好，今天的状态没有被弄丢。',
-      ]);
+      return styled('lazy');
     }
 
-    return pick(messages);
+    return styled('base');
   };
 
   const persistEntry = (targetEntry: DailyEntry) => {
@@ -166,13 +146,21 @@ export default function RecordPage() {
       rawText: targetEntry.rawText,
     });
     setEntry(savedEntry);
-    setEncouragement(getEncouragement(savedEntry));
+    removeDraftEntry(today);
+    setDraftDirty(false);
+    setDraftNotice('');
+    setEncouragement(getEncouragement(savedEntry, encouragementStyle));
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };
 
   const handleSave = () => {
     persistEntry(entry);
+  };
+
+  const updateEncouragementStyle = (style: EncouragementStyle) => {
+    setEncouragementStyle(style);
+    saveEncouragementStyle(style);
   };
 
   return (
@@ -195,6 +183,18 @@ export default function RecordPage() {
             </p>
           </div>
           <div className="flex items-center gap-2">
+            <div className="hidden md:flex items-center gap-2">
+              <SlidersHorizontal className="w-4 h-4 text-text-secondary" />
+              <select
+                className="input-field py-2 px-3 text-sm"
+                value={encouragementStyle}
+                onChange={(event) => updateEncouragementStyle(event.target.value as EncouragementStyle)}
+              >
+                {encouragementStyles.map((style) => (
+                  <option key={style.key} value={style.key}>{style.label}</option>
+                ))}
+              </select>
+            </div>
             <button
               onClick={() => setLazyMode((value) => !value)}
               className={`btn-secondary flex items-center gap-2 ${lazyMode ? 'bg-lavender/10 text-lavender-dark border-lavender' : ''}`}
@@ -215,8 +215,27 @@ export default function RecordPage() {
           </div>
         )}
 
+        <div className="md:hidden mb-4 flex items-center gap-2">
+          <SlidersHorizontal className="w-4 h-4 text-text-secondary" />
+          <select
+            className="input-field py-2 px-3 text-sm"
+            value={encouragementStyle}
+            onChange={(event) => updateEncouragementStyle(event.target.value as EncouragementStyle)}
+          >
+            {encouragementStyles.map((style) => (
+              <option key={style.key} value={style.key}>{style.label}</option>
+            ))}
+          </select>
+        </div>
+
+        {draftNotice && (
+          <div className="mb-4 rounded-2xl bg-warm-beige/50 px-4 py-3 text-xs text-text-secondary">
+            {draftNotice}
+          </div>
+        )}
+
         {lazyMode ? (
-          <LazyModeCard entry={entry} setEntry={setEntry} onSave={persistEntry} />
+          <LazyModeCard entry={entry} setEntry={updateEntry} onSave={persistEntry} />
         ) : (
           <>
         {/* Tabs */}
@@ -245,11 +264,11 @@ export default function RecordPage() {
 
         {/* Tab Content */}
         <div className="card mb-6">
-          {activeTab === 'diet' && <DietTab entry={entry} setEntry={setEntry} />}
-          {activeTab === 'mood' && <MoodTab entry={entry} setEntry={setEntry} />}
-          {activeTab === 'sleep' && <SleepTab entry={entry} setEntry={setEntry} />}
-          {activeTab === 'period' && <PeriodTab entry={entry} setEntry={setEntry} />}
-          {activeTab === 'exercise' && <ExerciseTab entry={entry} setEntry={setEntry} />}
+          {activeTab === 'diet' && <DietTab entry={entry} setEntry={updateEntry} />}
+          {activeTab === 'mood' && <MoodTab entry={entry} setEntry={updateEntry} />}
+          {activeTab === 'sleep' && <SleepTab entry={entry} setEntry={updateEntry} />}
+          {activeTab === 'period' && <PeriodTab entry={entry} setEntry={updateEntry} />}
+          {activeTab === 'exercise' && <ExerciseTab entry={entry} setEntry={updateEntry} />}
         </div>
 
         {/* Gratitude */}
@@ -264,7 +283,7 @@ export default function RecordPage() {
             rows={3}
             placeholder="今天感恩的事情..."
             value={entry.gratitude}
-            onChange={(e) => setEntry({ ...entry, gratitude: e.target.value })}
+            onChange={(e) => updateEntry({ ...entry, gratitude: e.target.value })}
           />
         </div>
           </>
@@ -272,6 +291,107 @@ export default function RecordPage() {
       </div>
     </main>
   );
+}
+
+type EncouragementKind = 'base' | 'lowSleep' | 'highAnxiety' | 'stomach' | 'complete' | 'exercise' | 'gratitude' | 'lazy';
+
+const encouragementMessages: Record<EncouragementStyle, Record<EncouragementKind, string[]>> = {
+  gentle: {
+    base: [
+      '你又认真照顾了自己一次，这件小事很珍贵。',
+      '谢谢你把今天交给记录，慢慢来已经很好了。',
+      '记录不是打分，是陪你看见自己。你做得很好。',
+      '今天的记录已经收好，你可以轻轻松一口气了。',
+    ],
+    lowSleep: [
+      '今天睡得有点少，已经记录下来了，今晚尽量早点休息，好好把电充回来。',
+      '能把睡眠不足记录下来很重要，身体的提醒已经被你接住了。',
+    ],
+    highAnxiety: [
+      '焦虑被看见以后，就不再是一个人扛着它了。先慢慢呼吸，你已经做得很棒。',
+      '今天情绪很重，但你仍然完成了记录，这一步很值得肯定。',
+    ],
+    stomach: [
+      '肠胃不舒服也被认真记下来了，接下来给自己一点清淡和温热。',
+      '你已经捕捉到身体的小信号了，之后会更容易找到舒服的节奏。',
+    ],
+    complete: [
+      '今天记录得很完整，身体、情绪和生活都被温柔地照顾到了。',
+      '这一条记录信息很丰富，之后回看时会特别有帮助。',
+    ],
+    exercise: [
+      '运动也记录好了，哪怕只是动一动，身体都会收到这份善意。',
+      '你把运动这件事落到了记录里，很棒，节奏正在慢慢建立。',
+    ],
+    gratitude: [
+      '今天的温暖小事已经收好，愿它在你需要的时候再亮一下。',
+      '谢谢你把今天值得珍惜的部分留下来了。',
+    ],
+    lazy: [
+      '懒人模式也完成得很好，想到什么就先记下来，本来就是一种照顾。',
+      '你用最省力的方式完成了记录，这很聪明，也很温柔。',
+    ],
+  },
+  direct: {
+    base: ['已保存。你完成了一次有效记录。', '记录完成。今天的状态已经留下来了。'],
+    lowSleep: ['已保存。睡眠偏少，今晚优先休息。', '记录完成。最近先把补觉放到前面。'],
+    highAnxiety: ['已保存。焦虑偏高，先降低今天剩余任务量。', '记录完成。情绪负荷高，先给自己留缓冲。'],
+    stomach: ['已保存。肠胃不适已记录，接下来饮食先清淡。', '记录完成。今天避免刺激性食物。'],
+    complete: ['记录很完整。后续复盘会更有价值。', '已保存。今天的信息足够清楚。'],
+    exercise: ['运动已记录。继续保持可执行的节奏。', '已保存。活动量已经纳入记录。'],
+    gratitude: ['感恩已记录。保留这条正向线索。', '已保存。今天的积极事件已经留下。'],
+    lazy: ['懒人记录已保存。原文和归类都已保留。', '已保存。用低成本方式完成记录，很有效。'],
+  },
+  energetic: {
+    base: ['完成了！又给自己加了一点照顾。', '漂亮，今天的记录已入账。'],
+    lowSleep: ['记录好了！今晚早点补能量，明天会轻一点。', '收到睡眠提醒，今天先把休息安排上。'],
+    highAnxiety: ['你在高压下也完成了记录，这很强。先稳住呼吸。', '情绪很满也没有放弃照顾自己，做得好。'],
+    stomach: ['身体信号抓到了！接下来给肠胃一点舒服空间。', '这条很关键，记录下来就更容易调整。'],
+    complete: ['今天记录得很全，复盘素材很扎实。', '一口气照顾了好几个维度，很有行动力。'],
+    exercise: ['运动也记上了，身体会收到这份投入。', '活动完成并记录，节奏感正在起来。'],
+    gratitude: ['这条温暖被留下了，很好。', '把好事收进记录里，今天多了一点亮色。'],
+    lazy: ['懒人模式完成，省力但不敷衍。', '一句话也能照顾自己，这步很聪明。'],
+  },
+  minimal: {
+    base: ['已保存。', '记录完成。'],
+    lowSleep: ['已保存。今晚多休息。', '睡眠偏少，已记录。'],
+    highAnxiety: ['已保存。先放慢。', '焦虑偏高，已记录。'],
+    stomach: ['已保存。饮食清淡些。', '肠胃不适，已记录。'],
+    complete: ['记录完整。', '保存完成。'],
+    exercise: ['运动已记录。', '已保存。'],
+    gratitude: ['感恩已记录。', '已保存。'],
+    lazy: ['懒人记录已保存。', '已保存。'],
+  },
+};
+
+function draftStorageKey(date: string): string {
+  const session = getAuthSession();
+  const owner = session?.mode === 'user' ? session.username : 'guest';
+  return `warm_health_draft_${owner}_${date}`;
+}
+
+function readDraftEntry(date: string): DailyEntry | null {
+  if (typeof window === 'undefined') return null;
+
+  try {
+    const raw = localStorage.getItem(draftStorageKey(date));
+    return raw ? JSON.parse(raw) as DailyEntry : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeDraftEntry(date: string, entry: DailyEntry): void {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem(draftStorageKey(date), JSON.stringify({
+    ...entry,
+    updatedAt: new Date().toISOString(),
+  }));
+}
+
+function removeDraftEntry(date: string): void {
+  if (typeof window === 'undefined') return;
+  localStorage.removeItem(draftStorageKey(date));
 }
 
 // 饮食记录

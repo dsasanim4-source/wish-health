@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { getEntries, getStats, syncEntriesFromSupabase } from '@/lib/storage';
 import { DailyEntry } from '@/lib/types';
-import { BarChart3, TrendingUp, Calendar, Heart, Coffee, Moon, Sparkles, Shield } from 'lucide-react';
+import { buildHealthAlerts, buildWeeklySummary, downloadEntriesCsv, openPrintableReport } from '@/lib/insights';
+import { BarChart3, TrendingUp, Calendar, Heart, Coffee, Moon, Sparkles, Shield, Download, Printer, Bell } from 'lucide-react';
 import {
   LineChart,
   Line,
@@ -27,6 +28,8 @@ export default function StatsPage() {
   }, []);
 
   const stats = useMemo(() => getStats(entries), [entries]);
+  const weeklySummary = useMemo(() => buildWeeklySummary(entries), [entries]);
+  const alerts = useMemo(() => buildHealthAlerts(entries), [entries]);
 
   // 焦虑趋势数据
   const anxietyTrend = useMemo(() => {
@@ -99,13 +102,27 @@ export default function StatsPage() {
       <div className="max-w-5xl mx-auto px-4 py-6 animate-fade-in">
         {/* Header */}
         <div className="mb-6">
-          <h1 className="text-2xl font-bold text-text-primary flex items-center gap-2">
-            <BarChart3 className="w-6 h-6 text-lavender" />
-            健康统计
-          </h1>
-          <p className="text-text-secondary text-sm mt-1">
-            看看你的健康变化趋势
-          </p>
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+            <div>
+              <h1 className="text-2xl font-bold text-text-primary flex items-center gap-2">
+                <BarChart3 className="w-6 h-6 text-lavender" />
+                健康统计
+              </h1>
+              <p className="text-text-secondary text-sm mt-1">
+                看看你的健康变化趋势
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <button className="btn-secondary flex items-center gap-2 px-3 py-2 text-sm" onClick={() => downloadEntriesCsv(entries, 'health-report.csv')}>
+                <Download className="w-4 h-4" />
+                CSV
+              </button>
+              <button className="btn-secondary flex items-center gap-2 px-3 py-2 text-sm" onClick={() => openPrintableReport(entries, '健康统计报告')}>
+                <Printer className="w-4 h-4" />
+                PDF
+              </button>
+            </div>
+          </div>
         </div>
 
         {/* Overview Cards */}
@@ -139,6 +156,32 @@ export default function StatsPage() {
             <p className="text-2xl font-bold text-text-primary">{stats.avgSleep.toFixed(1)}<span className="text-sm font-normal text-text-secondary">h</span></p>
           </div>
         </div>
+
+        {stats.totalDays > 0 && (
+          <div className="grid md:grid-cols-[1.4fr_1fr] gap-4 mb-8">
+            <section className="card">
+              <h3 className="font-semibold text-text-primary mb-3 flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-peach" />
+                本周总结
+              </h3>
+              <p className="text-sm text-text-secondary leading-relaxed">{weeklySummary}</p>
+            </section>
+
+            <section className="card">
+              <h3 className="font-semibold text-text-primary mb-3 flex items-center gap-2">
+                <Bell className="w-5 h-5 text-sage-dark" />
+                轻提醒
+              </h3>
+              <div className="space-y-2">
+                {alerts.map((alert) => (
+                  <p key={alert} className="rounded-xl bg-warm-beige/45 px-3 py-2 text-sm text-text-secondary">
+                    {alert}
+                  </p>
+                ))}
+              </div>
+            </section>
+          </div>
+        )}
 
         {/* Charts Grid */}
         <div className="grid md:grid-cols-2 gap-4 mb-8">

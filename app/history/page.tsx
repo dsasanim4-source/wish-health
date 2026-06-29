@@ -4,11 +4,16 @@ import { useState, useMemo, useEffect } from 'react';
 import { getEntries, deleteEntry, syncEntriesFromSupabase } from '@/lib/storage';
 import { DailyEntry } from '@/lib/types';
 import { adminLoginTotp } from '@/lib/auth';
-import { Calendar, Trash2, Search, Heart, Coffee, Moon, Activity, Sparkles } from 'lucide-react';
+import { downloadEntriesCsv, getEntriesWithinDays, openPrintableReport } from '@/lib/insights';
+import { Calendar, Trash2, Search, Heart, Coffee, Moon, Activity, Sparkles, Download, Printer } from 'lucide-react';
+
+type HistoryFilter = 'all' | 'diet' | 'mood' | 'sleep' | 'period' | 'exercise' | 'stomach' | 'moodHigh' | 'sleepLow';
+type DateRange = 'all' | '7' | '30';
 
 export default function HistoryPage() {
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterType, setFilterType] = useState<'all' | 'diet' | 'mood' | 'sleep' | 'period' | 'exercise'>('all');
+  const [filterType, setFilterType] = useState<HistoryFilter>('all');
+  const [dateRange, setDateRange] = useState<DateRange>('all');
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [entries, setEntries] = useState<DailyEntry[]>(() => getEntries());
 
@@ -29,21 +34,37 @@ export default function HistoryPage() {
   };
 
   const filteredEntries = useMemo(() => {
-    return entries.filter((entry) => {
-      const matchesSearch = searchTerm === '' ||
-        entry.gratitude.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        entry.diet.some(d => d.food.toLowerCase().includes(searchTerm.toLowerCase()));
+    const source = dateRange === 'all' ? entries : getEntriesWithinDays(entries, Number(dateRange));
+    return source.filter((entry) => {
+      const keyword = searchTerm.trim().toLowerCase();
+      const searchable = [
+        entry.date,
+        entry.gratitude,
+        entry.rawText || '',
+        ...entry.diet.flatMap((item) => [item.food, item.notes || '', item.stomachFeeling]),
+        entry.mood?.mood || '',
+        entry.mood?.notes || '',
+        entry.mood?.triggers || '',
+        entry.sleep?.notes || '',
+        entry.period?.symptoms || '',
+        entry.exercise?.type || '',
+        entry.exercise?.notes || '',
+      ].join(' ').toLowerCase();
+      const matchesSearch = keyword === '' || searchable.includes(keyword);
 
       const matchesFilter = filterType === 'all' ||
         (filterType === 'diet' && entry.diet.length > 0) ||
         (filterType === 'mood' && entry.mood !== null) ||
         (filterType === 'sleep' && entry.sleep !== null) ||
         (filterType === 'period' && entry.period !== null) ||
-        (filterType === 'exercise' && entry.exercise !== null);
+        (filterType === 'exercise' && entry.exercise !== null) ||
+        (filterType === 'stomach' && entry.diet.some((item) => item.stomachFeeling === 'pain' || item.stomachFeeling === 'uncomfortable')) ||
+        (filterType === 'moodHigh' && (entry.mood?.anxietyLevel || 0) >= 4) ||
+        (filterType === 'sleepLow' && (entry.sleep?.hours || 0) < 6);
 
       return matchesSearch && matchesFilter;
     });
-  }, [entries, searchTerm, filterType]);
+  }, [entries, searchTerm, filterType, dateRange]);
 
   const handleDelete = (id: string) => {
     if (confirmDelete === id) {
@@ -82,13 +103,33 @@ export default function HistoryPage() {
       <div className="max-w-5xl mx-auto px-4 py-6 animate-fade-in">
         {/* Header */}
         <div className="mb-6">
-          <h1 className="text-2xl font-bold text-text-primary flex items-center gap-2">
-            <Calendar className="w-6 h-6 text-lavender" />
-            历史记录
-          </h1>
-          <p className="text-text-secondary text-sm mt-1">
-            共记录了 {entries.length} 天
-          </p>
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+            <div>
+              <h1 className="text-2xl font-bold text-text-primary flex items-center gap-2">
+                <Calendar className="w-6 h-6 text-lavender" />
+                历史记录
+              </h1>
+              <p className="text-text-secondary text-sm mt-1">
+                共记录了 {entries.length} 天，当前显示 {filteredEntries.length} 条
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <button
+                className="btn-secondary flex items-center gap-2 px-3 py-2 text-sm"
+                onClick={() => downloadEntriesCsv(filteredEntries, 'health-records.csv')}
+              >
+                <Download className="w-4 h-4" />
+                CSV
+              </button>
+              <button
+                className="btn-secondary flex items-center gap-2 px-3 py-2 text-sm"
+                onClick={() => openPrintableReport(filteredEntries, '健康记录报告')}
+              >
+                <Printer className="w-4 h-4" />
+                PDF
+              </button>
+            </div>
+          </div>
         </div>
 
         {/* Filters */}
@@ -111,6 +152,9 @@ export default function HistoryPage() {
               { key: 'sleep' as const, label: '睡眠', icon: Moon },
               { key: 'period' as const, label: '生理期', icon: Calendar },
               { key: 'exercise' as const, label: '运动', icon: Activity },
+              { key: 'stomach' as const, label: '肠胃不适', icon: Coffee },
+              { key: 'moodHigh' as const, label: '焦虑偏高', icon: Heart },
+              { key: 'sleepLow' as const, label: '睡眠偏少', icon: Moon },
             ].map(({ key, label, icon: Icon }) => (
               <button
                 key={key}
@@ -123,6 +167,26 @@ export default function HistoryPage() {
               >
                 {Icon && <Icon className="w-3 h-3" />}
                 {label}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex gap-2 overflow-x-auto pb-2">
+            {[
+              { key: 'all' as const, label: '全部时间' },
+              { key: '7' as const, label: '近 7 天' },
+              { key: '30' as const, label: '近 30 天' },
+            ].map((item) => (
+              <button
+                key={item.key}
+                onClick={() => setDateRange(item.key)}
+                className={`px-3 py-2 rounded-xl text-xs font-medium whitespace-nowrap transition-all ${
+                  dateRange === item.key
+                    ? 'bg-white text-text-primary shadow-sm'
+                    : 'text-text-secondary hover:bg-white/50'
+                }`}
+              >
+                {item.label}
               </button>
             ))}
           </div>

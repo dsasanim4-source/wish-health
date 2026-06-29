@@ -358,6 +358,39 @@ begin
 end;
 $$;
 
+create or replace function public.app_admin_reset_password(
+  p_admin_token text,
+  p_user_id uuid
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  updated_user public.app_users;
+begin
+  perform public.app_assert_admin(p_admin_token);
+
+  update public.app_users
+  set password_hash = extensions.crypt('123456', extensions.gen_salt('bf')),
+      must_change_password = true,
+      updated_at = now()
+  where id = p_user_id
+    and active = true
+  returning * into updated_user;
+
+  if updated_user.id is null then
+    raise exception '用户不存在或已停用';
+  end if;
+
+  delete from public.app_sessions
+  where user_id = updated_user.id;
+
+  return to_jsonb(updated_user) - 'password_hash';
+end;
+$$;
+
 create or replace function public.app_admin_list_users(p_admin_token text)
 returns table (
   id uuid,
@@ -379,6 +412,9 @@ begin
   order by u.created_at desc;
 end;
 $$;
+
+drop function if exists public.app_get_entries(text);
+drop function if exists public.app_admin_list_records(text);
 
 create or replace function public.app_get_entries(p_session_token text)
 returns table (
