@@ -1,13 +1,12 @@
 'use client';
 
 import { useState } from 'react';
-import { Heart, Lock, Search, User } from 'lucide-react';
+import { Heart, Lock, User } from 'lucide-react';
 import { adminLoginTotp, login, type AuthSession } from '@/lib/auth';
 
 export default function LoginScreen({ onLogin }: { onLogin: (session: AuthSession) => void }) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [adminCode, setAdminCode] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -15,28 +14,23 @@ export default function LoginScreen({ onLogin }: { onLogin: (session: AuthSessio
     setError('');
     setLoading(true);
     try {
+      const adminCode = password.trim();
+      if (/^\d{6}$/.test(adminCode)) {
+        try {
+          const session = await adminLoginTotp(adminCode);
+          onLogin(session);
+          return;
+        } catch (err) {
+          if (!username.trim()) {
+            throw err;
+          }
+        }
+      }
+
       const session = await login(username, password);
       onLogin(session);
     } catch (err) {
       setError(err instanceof Error ? err.message : '登录失败');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleAdminCode = async (value: string) => {
-    const code = value.replace(/\D/g, '').slice(0, 6);
-    setAdminCode(code);
-    setError('');
-
-    if (code.length !== 6) return;
-
-    setLoading(true);
-    try {
-      const session = await adminLoginTotp(code);
-      onLogin(session);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '管理员验证失败');
     } finally {
       setLoading(false);
     }
@@ -56,19 +50,6 @@ export default function LoginScreen({ onLogin }: { onLogin: (session: AuthSessio
         </div>
 
         <div className="space-y-4">
-          <div className="relative">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-text-secondary" />
-            <input
-              className="input-field pl-11"
-              inputMode="numeric"
-              placeholder="管理员搜索框：输入 Google 动态密码"
-              value={adminCode}
-              onChange={(event) => handleAdminCode(event.target.value)}
-            />
-          </div>
-
-          <div className="h-px bg-warm-beige" />
-
           <div>
             <label className="text-sm font-medium text-text-secondary mb-1 block">用户名</label>
             <div className="relative">
@@ -91,7 +72,7 @@ export default function LoginScreen({ onLogin }: { onLogin: (session: AuthSessio
                 type="password"
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
-                placeholder="初始密码为 123456"
+                placeholder="用户密码，或管理员 6 位动态码"
                 onKeyDown={(event) => {
                   if (event.key === 'Enter') void handleLogin();
                 }}
