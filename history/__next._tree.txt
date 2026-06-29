@@ -1,2 +1,2 @@
-:HL["/wish-health/_next/static/chunks/0-k74qafbv9lr.css","style"]
-0:{"tree":{"name":"","param":null,"prefetchHints":16,"slots":{"children":{"name":"history","param":null,"prefetchHints":0,"slots":{"children":{"name":"__PAGE__","param":null,"prefetchHints":0,"slots":null}}}}},"staleTime":300,"buildId":"CUplVwELKXLy5Xu1auGdX"}
+:HL["/wish-health/_next/static/chunks/0xtzjlig_3zau.css","style"]
+0:{"tree":{"name":"","param":null,"prefetchHints":16,"slots":{"children":{"name":"history","param":null,"prefetchHints":0,"slots":{"children":{"name":"__PAGE__","param":null,"prefetchHints":0,"slots":null}}}}},"staleTime":300,"buildId":"_iYhQD2rwX8HqTi9dgJIe"}
