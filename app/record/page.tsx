@@ -1,15 +1,32 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { getEntryByDate, saveEntry, syncEntriesFromSupabase } from '@/lib/storage';
 import { DailyEntry, DietRecord, MoodRecord, SleepRecord, PeriodRecord, ExerciseRecord } from '@/lib/types';
-import { Coffee, Moon, Heart, Activity, Calendar, Sparkles, Save, X, Check } from 'lucide-react';
+import { Coffee, Moon, Heart, Activity, Calendar, Sparkles, Save, X, Check, Mic, MicOff, Wand2 } from 'lucide-react';
+
+type SpeechResultAlternative = { transcript: string };
+type SpeechResult = { 0: SpeechResultAlternative };
+type SpeechResultList = { length: number; [index: number]: SpeechResult };
+type SpeechRecognitionEventLike = { results: SpeechResultList };
+type SpeechRecognitionErrorEventLike = { error?: string };
+type BrowserSpeechRecognition = {
+  lang: string;
+  interimResults: boolean;
+  continuous: boolean;
+  onresult: ((event: SpeechRecognitionEventLike) => void) | null;
+  onend: (() => void) | null;
+  onerror: ((event: SpeechRecognitionErrorEventLike) => void) | null;
+  start: () => void;
+  stop: () => void;
+};
 
 export default function RecordPage() {
   const [entry, setEntry] = useState<DailyEntry | null>(null);
   const [activeTab, setActiveTab] = useState<'diet' | 'mood' | 'sleep' | 'period' | 'exercise'>('diet');
   const [saved, setSaved] = useState(false);
   const [encouragement, setEncouragement] = useState('');
+  const [lazyMode, setLazyMode] = useState(false);
 
   const today = new Date().toISOString().split('T')[0];
 
@@ -66,20 +83,24 @@ export default function RecordPage() {
     return messages[Math.floor(Math.random() * messages.length)];
   };
 
-  const handleSave = () => {
+  const persistEntry = (targetEntry: DailyEntry) => {
     const savedEntry = saveEntry({
-      date: entry.date,
-      diet: entry.diet,
-      mood: entry.mood,
-      sleep: entry.sleep,
-      period: entry.period,
-      exercise: entry.exercise,
-      gratitude: entry.gratitude,
+      date: targetEntry.date,
+      diet: targetEntry.diet,
+      mood: targetEntry.mood,
+      sleep: targetEntry.sleep,
+      period: targetEntry.period,
+      exercise: targetEntry.exercise,
+      gratitude: targetEntry.gratitude,
     });
     setEntry(savedEntry);
     setEncouragement(getEncouragement(savedEntry));
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
+  };
+
+  const handleSave = () => {
+    persistEntry(entry);
   };
 
   return (
@@ -101,10 +122,19 @@ export default function RecordPage() {
               })}
             </p>
           </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setLazyMode((value) => !value)}
+              className={`btn-secondary flex items-center gap-2 ${lazyMode ? 'bg-lavender/10 text-lavender-dark border-lavender' : ''}`}
+            >
+              <Wand2 className="w-4 h-4" />
+              {lazyMode ? '普通模式' : '懒人模式'}
+            </button>
           <button onClick={handleSave} className="btn-primary flex items-center gap-2">
             {saved ? <Check className="w-4 h-4" /> : <Save className="w-4 h-4" />}
             {saved ? '已保存' : '保存'}
           </button>
+          </div>
         </div>
 
         {encouragement && (
@@ -113,6 +143,10 @@ export default function RecordPage() {
           </div>
         )}
 
+        {lazyMode ? (
+          <LazyModeCard entry={entry} setEntry={setEntry} onSave={persistEntry} />
+        ) : (
+          <>
         {/* Tabs */}
         <div className="flex gap-2 mb-6 overflow-x-auto pb-2">
           {[
@@ -161,12 +195,303 @@ export default function RecordPage() {
             onChange={(e) => setEntry({ ...entry, gratitude: e.target.value })}
           />
         </div>
+          </>
+        )}
       </div>
     </main>
   );
 }
 
 // 饮食记录
+function LazyModeCard({
+  entry,
+  setEntry,
+  onSave,
+}: {
+  entry: DailyEntry;
+  setEntry: React.Dispatch<React.SetStateAction<DailyEntry | null>>;
+  onSave: (entry: DailyEntry) => void;
+}) {
+  const [text, setText] = useState('');
+  const [listening, setListening] = useState(false);
+  const [summary, setSummary] = useState<string[]>([]);
+  const recognitionRef = useRef<BrowserSpeechRecognition | null>(null);
+
+  const applyInput = () => {
+    if (!text.trim()) return;
+
+    const { nextEntry, recognized } = classifyLazyInput(entry, text);
+    setEntry(nextEntry);
+    setSummary(recognized);
+    setText('');
+    onSave(nextEntry);
+  };
+
+  const toggleSpeech = () => {
+    if (listening) {
+      recognitionRef.current?.stop();
+      setListening(false);
+      return;
+    }
+
+    const speechWindow = window as Window & typeof globalThis & {
+      SpeechRecognition?: new () => BrowserSpeechRecognition;
+      webkitSpeechRecognition?: new () => BrowserSpeechRecognition;
+    };
+    const Recognition = speechWindow.SpeechRecognition || speechWindow.webkitSpeechRecognition;
+
+    if (!Recognition) {
+      setSummary(['当前浏览器不支持语音转文字，可以直接打字输入。']);
+      return;
+    }
+
+    const recognition = new Recognition();
+    recognition.lang = 'zh-CN';
+    recognition.interimResults = false;
+    recognition.continuous = false;
+    recognition.onresult = (event) => {
+      const transcript = Array.from({ length: event.results.length }, (_, index) => {
+        return event.results[index][0].transcript;
+      }).join(' ');
+      setText((current) => `${current}${current ? ' ' : ''}${transcript}`.trim());
+    };
+    recognition.onerror = () => {
+      setSummary(['语音识别没有成功，可以再点一次麦克风或直接输入。']);
+      setListening(false);
+    };
+    recognition.onend = () => setListening(false);
+    recognitionRef.current = recognition;
+    setListening(true);
+    recognition.start();
+  };
+
+  return (
+    <div className="card">
+      <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 mb-4">
+        <div>
+          <h2 className="font-semibold text-text-primary flex items-center gap-2">
+            <Wand2 className="w-5 h-5 text-lavender-dark" />
+            懒人模式
+          </h2>
+          <p className="text-sm text-text-secondary mt-1">
+            一个框里随便写，系统会自动归到饮食、情绪、睡眠、生理期、运动和今日感恩。
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={toggleSpeech}
+          className={`btn-secondary flex items-center justify-center gap-2 ${listening ? 'bg-blush/10 text-blush-dark border-blush' : ''}`}
+        >
+          {listening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+          {listening ? '停止听写' : '语音输入'}
+        </button>
+      </div>
+
+      <textarea
+        className="input-field resize-none min-h-[180px]"
+        value={text}
+        onChange={(event) => setText(event.target.value)}
+        placeholder="照着说就行：早饭喝了小米粥，胃有点胀；今天心情焦虑 4 分；昨晚睡了 6 小时，质量一般；生理期第 2 天，量中等；散步 20 分钟；今天感谢朋友陪我聊天。"
+      />
+
+      <div className="grid md:grid-cols-3 gap-2 mt-3 text-xs text-text-secondary">
+        <div className="rounded-xl bg-warm-beige/40 p-3">饮食：吃了什么，胃舒服吗</div>
+        <div className="rounded-xl bg-warm-beige/40 p-3">情绪：开心、焦虑、压力几分</div>
+        <div className="rounded-xl bg-warm-beige/40 p-3">睡眠：睡了几小时，质量如何</div>
+        <div className="rounded-xl bg-warm-beige/40 p-3">生理期：第几天，量多量少</div>
+        <div className="rounded-xl bg-warm-beige/40 p-3">运动：做了什么，多久</div>
+        <div className="rounded-xl bg-warm-beige/40 p-3">感恩：今天让你暖一下的事</div>
+      </div>
+
+      {summary.length > 0 && (
+        <div className="mt-4 rounded-2xl bg-sage/15 px-4 py-3 text-sm text-sage-dark">
+          {summary.join('；')}
+        </div>
+      )}
+
+      <div className="flex flex-col md:flex-row gap-2 mt-4">
+        <button className="btn-primary flex-1" onClick={applyInput}>
+          归类并保存
+        </button>
+        <button
+          className="btn-secondary"
+          onClick={() => {
+            setText('');
+            setSummary([]);
+          }}
+        >
+          清空
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function classifyLazyInput(entry: DailyEntry, input: string): { nextEntry: DailyEntry; recognized: string[] } {
+  const text = input.trim();
+  const compact = text.replace(/\s+/g, ' ');
+  const nextEntry: DailyEntry = {
+    ...entry,
+    diet: [...entry.diet],
+    mood: entry.mood ? { ...entry.mood } : null,
+    sleep: entry.sleep ? { ...entry.sleep } : null,
+    period: entry.period ? { ...entry.period } : null,
+    exercise: entry.exercise ? { ...entry.exercise } : null,
+  };
+  const recognized: string[] = [];
+
+  if (/吃|喝|早饭|早餐|午饭|午餐|晚饭|晚餐|加餐|零食|宵夜/.test(compact)) {
+    nextEntry.diet.push({
+      mealType: inferMealType(compact),
+      food: extractAfterKeyword(compact, /(早饭|早餐|午饭|午餐|晚饭|晚餐|加餐|零食|宵夜|吃了|喝了|吃|喝)/) || compact.slice(0, 36),
+      stomachFeeling: inferStomachFeeling(compact),
+      notes: compact,
+    });
+    recognized.push('已归类到饮食');
+  }
+
+  const mood = inferMood(compact);
+  if (mood) {
+    nextEntry.mood = mood;
+    recognized.push('已归类到情绪');
+  }
+
+  const sleep = inferSleep(compact);
+  if (sleep) {
+    nextEntry.sleep = sleep;
+    recognized.push('已归类到睡眠');
+  }
+
+  const period = inferPeriod(compact);
+  if (period) {
+    nextEntry.period = period;
+    recognized.push('已归类到生理期');
+  }
+
+  const exercise = inferExercise(compact);
+  if (exercise) {
+    nextEntry.exercise = exercise;
+    recognized.push('已归类到运动');
+  }
+
+  const gratitude = inferGratitude(compact);
+  if (gratitude) {
+    nextEntry.gratitude = nextEntry.gratitude ? `${nextEntry.gratitude}\n${gratitude}` : gratitude;
+    recognized.push('已归类到今日感恩');
+  }
+
+  if (recognized.length === 0) {
+    nextEntry.gratitude = nextEntry.gratitude ? `${nextEntry.gratitude}\n${compact}` : compact;
+    recognized.push('没有识别出明确类别，已先放到今日感恩');
+  }
+
+  return { nextEntry, recognized };
+}
+
+function extractAfterKeyword(text: string, keyword: RegExp): string {
+  const match = text.match(keyword);
+  if (!match || match.index === undefined) return '';
+  return text
+    .slice(match.index + match[0].length)
+    .split(/[，。；;,.]/)[0]
+    .replace(/^(了|：|:)/, '')
+    .trim();
+}
+
+function inferMealType(text: string): DietRecord['mealType'] {
+  if (/早饭|早餐|早上/.test(text)) return 'breakfast';
+  if (/午饭|午餐|中午/.test(text)) return 'lunch';
+  if (/晚饭|晚餐|晚上/.test(text)) return 'dinner';
+  return 'snack';
+}
+
+function inferStomachFeeling(text: string): DietRecord['stomachFeeling'] {
+  if (/胃痛|肚子痛|疼|痛/.test(text)) return 'pain';
+  if (/胀|不舒服|恶心|反酸|拉肚子|难受/.test(text)) return 'uncomfortable';
+  if (/舒服|很好|没事|不难受/.test(text)) return 'good';
+  return 'okay';
+}
+
+function inferMood(text: string): MoodRecord | null {
+  if (!/心情|情绪|开心|高兴|平静|放松|焦虑|紧张|担心|难过|低落|压力|崩溃|烦/.test(text)) return null;
+
+  let mood: MoodRecord['mood'] = 'neutral';
+  if (/开心|高兴|愉快|快乐/.test(text)) mood = 'happy';
+  else if (/平静|放松|稳定/.test(text)) mood = 'calm';
+  else if (/焦虑|紧张|担心|慌|烦/.test(text)) mood = 'anxious';
+  else if (/难过|低落|伤心/.test(text)) mood = 'sad';
+  else if (/压力|崩溃|撑不住|累爆/.test(text)) mood = 'overwhelmed';
+
+  const levelMatch = text.match(/(?:焦虑|压力|紧张|情绪|心情)[^1-5]*([1-5])\s*分?|([1-5])\s*分?[^，。；;]*(?:焦虑|压力|紧张|情绪|心情)/);
+  const parsedLevel = Number(levelMatch?.[1] || levelMatch?.[2]);
+  const anxietyLevel = ([1, 2, 3, 4, 5].includes(parsedLevel)
+    ? parsedLevel
+    : mood === 'happy' || mood === 'calm'
+      ? 1
+      : mood === 'anxious' || mood === 'overwhelmed'
+        ? 4
+        : 3) as MoodRecord['anxietyLevel'];
+
+  return { mood, anxietyLevel, notes: text };
+}
+
+function inferSleep(text: string): SleepRecord | null {
+  if (!/睡|失眠|醒|困/.test(text)) return null;
+
+  const hoursMatch = text.match(/(\d+(?:\.\d+)?)\s*(?:个)?(?:小时|h)/i);
+  const hours = hoursMatch ? Number(hoursMatch[1]) : 7;
+  let quality: SleepRecord['quality'] = 'good';
+  if (/很好|不错|踏实/.test(text)) quality = 'excellent';
+  else if (/一般|还行/.test(text)) quality = 'fair';
+  else if (/差|失眠|醒了|没睡好|很困/.test(text)) quality = 'poor';
+
+  return { hours: Number.isFinite(hours) ? hours : 7, quality, notes: text };
+}
+
+function inferPeriod(text: string): PeriodRecord | null {
+  if (!/生理期|月经|姨妈|例假|经期|D[1-8]|第[一二三四五六七八12345678]天/.test(text)) return null;
+
+  const dayMatch = text.match(/D\s*([1-8])|第\s*([一二三四五六七八12345678])\s*天/i);
+  const dayText = dayMatch?.[1] || dayMatch?.[2] || '1';
+  const dayMap: Record<string, PeriodRecord['day']> = {
+    一: 1, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8,
+    '1': 1, '2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8,
+  };
+
+  let flow: PeriodRecord['flow'] = 'medium';
+  if (/点滴|一点点/.test(text)) flow = 'spotting';
+  else if (/量少|少/.test(text)) flow = 'light';
+  else if (/量大|多/.test(text)) flow = 'heavy';
+
+  return { day: dayMap[dayText] || 1, flow, symptoms: text };
+}
+
+function inferExercise(text: string): ExerciseRecord | null {
+  if (!/运动|散步|走路|跑步|瑜伽|健身|骑车|游泳|跳操|拉伸/.test(text)) return null;
+
+  const durationMatch = text.match(/(\d+)\s*(?:分钟|分|min)/i);
+  const duration = durationMatch ? Number(durationMatch[1]) : 30;
+  const typeMatch = text.match(/(散步|走路|跑步|瑜伽|健身|骑车|游泳|跳操|拉伸|运动)/);
+  let intensity: ExerciseRecord['intensity'] = 'moderate';
+  if (/轻松|轻度|慢走|拉伸/.test(text)) intensity = 'light';
+  else if (/剧烈|很累|大汗|冲刺|高强度/.test(text)) intensity = 'vigorous';
+
+  return {
+    type: typeMatch?.[1] || '运动',
+    duration: Number.isFinite(duration) ? duration : 30,
+    intensity,
+    notes: text,
+  };
+}
+
+function inferGratitude(text: string): string {
+  const gratitudeMatch = text.match(/(?:感谢|感恩|开心的是|温暖的是|今天好事)(.*)/);
+  if (gratitudeMatch?.[1]?.trim()) {
+    return gratitudeMatch[1].replace(/^[:：，,。]/, '').trim();
+  }
+  return '';
+}
+
 function DietTab({ entry, setEntry }: { entry: DailyEntry; setEntry: React.Dispatch<React.SetStateAction<DailyEntry | null>> }) {
   const [mealType, setMealType] = useState<'breakfast' | 'lunch' | 'dinner' | 'snack'>('breakfast');
   const [food, setFood] = useState('');
