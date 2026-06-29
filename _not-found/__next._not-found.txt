@@ -2,4 +2,4 @@
 2:I[39756,["/wish-health/_next/static/chunks/1mhbl8m4e8880.js","/wish-health/_next/static/chunks/3w21szlu3g0ql.js","/wish-health/_next/static/chunks/1-8s9_t85wwr4.js"],"default"]
 3:I[37457,["/wish-health/_next/static/chunks/1mhbl8m4e8880.js","/wish-health/_next/static/chunks/3w21szlu3g0ql.js","/wish-health/_next/static/chunks/1-8s9_t85wwr4.js"],"default"]
 4:[]
-0:{"rsc":["$","$1","c",{"children":[null,["$","$L2",null,{"parallelRouterKey":"children","template":["$","$L3",null,{}]}]]}],"isPartial":false,"staleTime":300,"varyParams":"$W4","buildId":"ThhZ-W2KeEiKEq4keL6NQ"}
+0:{"rsc":["$","$1","c",{"children":[null,["$","$L2",null,{"parallelRouterKey":"children","template":["$","$L3",null,{}]}]]}],"isPartial":false,"staleTime":300,"varyParams":"$W4","buildId":"kDo5-oSWws_jCj_cLCE_F"}
