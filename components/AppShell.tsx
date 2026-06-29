@@ -90,7 +90,9 @@ async function unregisterLegacyReminderWorker(): Promise<void> {
   const registration = await navigator.serviceWorker.getRegistration(`${basePath}/`);
   if (!registration) return;
 
-  const subscription = await registration.pushManager.getSubscription().catch(() => null);
+  const subscription = registration.pushManager
+    ? await registration.pushManager.getSubscription().catch(() => null)
+    : null;
   await subscription?.unsubscribe().catch(() => undefined);
   await registration.unregister().catch(() => undefined);
 }
