@@ -1,5 +1,5 @@
 1:"$Sreact.fragment"
-2:I[39756,["/wish-health/_next/static/chunks/0y4-pp46gfasq.js","/wish-health/_next/static/chunks/041qx0dnuv12q.js","/wish-health/_next/static/chunks/3w21szlu3g0ql.js","/wish-health/_next/static/chunks/1-8s9_t85wwr4.js"],"default"]
-3:I[37457,["/wish-health/_next/static/chunks/0y4-pp46gfasq.js","/wish-health/_next/static/chunks/041qx0dnuv12q.js","/wish-health/_next/static/chunks/3w21szlu3g0ql.js","/wish-health/_next/static/chunks/1-8s9_t85wwr4.js"],"default"]
+2:I[39756,["/wish-health/_next/static/chunks/3o-fu3apwop05.js","/wish-health/_next/static/chunks/0yejsr5vthhp7.js","/wish-health/_next/static/chunks/1-8s9_t85wwr4.js"],"default"]
+3:I[37457,["/wish-health/_next/static/chunks/3o-fu3apwop05.js","/wish-health/_next/static/chunks/0yejsr5vthhp7.js","/wish-health/_next/static/chunks/1-8s9_t85wwr4.js"],"default"]
 4:[]
-0:{"rsc":["$","$1","c",{"children":[null,["$","$L2",null,{"parallelRouterKey":"children","template":["$","$L3",null,{}]}]]}],"isPartial":false,"staleTime":300,"varyParams":"$W4","buildId":"_N4gT9tgB_gJfB1UHBPS6"}
+0:{"rsc":["$","$1","c",{"children":[null,["$","$L2",null,{"parallelRouterKey":"children","template":["$","$L3",null,{}]}]]}],"isPartial":false,"staleTime":300,"varyParams":"$W4","buildId":"cmFMTAgYoFnZ2ACyIM9uK"}
