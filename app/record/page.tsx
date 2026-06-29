@@ -5,7 +5,7 @@ import { getEntries, getEntryByDate, saveEntry, syncEntriesFromSupabase } from '
 import { DailyEntry, DietRecord, MoodRecord, SleepRecord, PeriodRecord, ExerciseRecord } from '@/lib/types';
 import { getAuthSession } from '@/lib/auth';
 import { encouragementStyles, getEncouragementStyle, saveEncouragementStyle, type EncouragementStyle } from '@/lib/insights';
-import { Coffee, Moon, Heart, Activity, Calendar, Sparkles, Save, X, Check, Mic, MicOff, Wand2, SlidersHorizontal } from 'lucide-react';
+import { Award, Coffee, Moon, Heart, Activity, Calendar, Sparkles, Save, X, Check, Mic, MicOff, Wand2, SlidersHorizontal } from 'lucide-react';
 
 type SpeechResultAlternative = { transcript: string };
 type SpeechResult = { 0: SpeechResultAlternative };
@@ -32,6 +32,7 @@ export default function RecordPage() {
   const [encouragementStyle, setEncouragementStyle] = useState<EncouragementStyle>('gentle');
   const [draftDirty, setDraftDirty] = useState(false);
   const [draftNotice, setDraftNotice] = useState('');
+  const [encouragementVersion, setEncouragementVersion] = useState(0);
 
   const today = new Date().toISOString().split('T')[0];
 
@@ -93,7 +94,7 @@ export default function RecordPage() {
 
   const getEncouragement = (savedEntry: DailyEntry, style: EncouragementStyle) => {
     const userName = getCurrentUserName();
-    const styled = (kind: EncouragementKind) => withUserName(pickEncouragementMessage(style, kind), userName);
+    const styled = (kind: EncouragementKind) => withUserName(pickEncouragementMessage(style, kind), userName, style);
     const completedSections = [
       savedEntry.diet.length > 0,
       Boolean(savedEntry.mood),
@@ -150,6 +151,7 @@ export default function RecordPage() {
     setDraftDirty(false);
     setDraftNotice('');
     setEncouragement(getEncouragement(savedEntry, encouragementStyle));
+    setEncouragementVersion((value) => value + 1);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };
@@ -210,8 +212,26 @@ export default function RecordPage() {
         </div>
 
         {encouragement && (
-          <div className="mb-6 rounded-2xl bg-sage/15 text-sage-dark px-4 py-3 text-sm font-medium">
-            {encouragement}
+          <div
+            key={encouragementVersion}
+            className="encouragement-card mb-6 rounded-2xl border border-sage/40 bg-white px-4 py-4 shadow-lg"
+          >
+            <div className="relative z-10 flex items-start gap-3">
+              <div className="encouragement-icon flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-sage/20 text-sage-dark">
+                <Award className="h-6 w-6" />
+              </div>
+              <div className="min-w-0">
+                <div className="mb-1 inline-flex items-center gap-1 rounded-full bg-peach/25 px-2.5 py-1 text-xs font-bold text-peach-dark">
+                  <Sparkles className="h-3.5 w-3.5" />
+                  记录完成
+                </div>
+                <p className="text-base font-bold leading-relaxed text-text-primary">
+                  {encouragement}
+                </p>
+              </div>
+            </div>
+            <Sparkles className="encouragement-spark encouragement-spark-one h-5 w-5 text-peach" />
+            <Sparkles className="encouragement-spark encouragement-spark-two h-4 w-4 text-lavender-dark" />
           </div>
         )}
 
@@ -308,6 +328,12 @@ const encouragementMessages: Record<EncouragementStyle, Record<EncouragementKind
       '今天没有被忽略，你把自己认真放进了记录里。',
       '这一条记录很小，但它在帮你一点点靠近更舒服的生活。',
       '你完成的不只是填写，是给自己多一点理解。',
+      '你今天真的做得很好，愿意记录就是在认真爱护自己。',
+      '能坚持把状态写下来，说明你很有耐心，也很有行动力。',
+      '你没有敷衍自己，这一点特别值得被夸一夸。',
+      '把今天安安稳稳记下来，本身就是一件很棒的事。',
+      '你很认真，也很勇敢，愿意面对自己的真实状态。',
+      '这一刻你选择照顾自己，真的很了不起。',
     ],
     lowSleep: [
       '今天睡得有点少，已经记录下来了，今晚尽量早点休息，好好把电充回来。',
@@ -316,6 +342,10 @@ const encouragementMessages: Record<EncouragementStyle, Record<EncouragementKind
       '身体的小电量被你看见了，今晚可以把休息放得更靠前一点。',
       '记录下睡眠偏少，是在温柔提醒自己别硬撑太久。',
       '这条睡眠记录会帮你更早发现身体的节奏变化。',
+      '睡少了还愿意认真记录，你真的很会照顾自己。',
+      '能及时看见疲惫，就是很棒的自我保护。',
+      '你把身体的低电量记下来了，这一步很聪明。',
+      '没有忽略睡眠这件事，说明你对自己很负责。',
     ],
     highAnxiety: [
       '焦虑被看见以后，就不再是一个人扛着它了。先慢慢呼吸，你已经做得很棒。',
@@ -324,6 +354,10 @@ const encouragementMessages: Record<EncouragementStyle, Record<EncouragementKind
       '情绪起伏被记录下来，就多了一点可以整理的空间。',
       '在压力很高的时候还愿意记录，说明你正在认真保护自己。',
       '先让这份焦虑被看见，后面的事可以一点一点来。',
+      '焦虑这么高还能完成记录，你真的很坚强，也很了不起。',
+      '你没有被情绪完全带走，还能回头照顾自己，这很棒。',
+      '能把难受说出来、记下来，是很值得肯定的能力。',
+      '今天不容易，但你还是完成了这一步，真的做得很好。',
     ],
     stomach: [
       '肠胃不舒服也被认真记下来了，接下来给自己一点清淡和温热。',
@@ -332,6 +366,10 @@ const encouragementMessages: Record<EncouragementStyle, Record<EncouragementKind
       '这次不舒服不是白白过去，它已经变成了可以参考的线索。',
       '你把肠胃感受留下来了，之后就更容易避开让自己难受的东西。',
       '先给身体一点温和回应，今天这条记录已经很有帮助。',
+      '你能这么细地留意身体感受，真的很细心。',
+      '把不舒服认真记下来，是很成熟的照顾方式。',
+      '你没有忽略身体发出的提醒，这一点很棒。',
+      '今天这条记录很有价值，你做得很到位。',
     ],
     complete: [
       '今天记录得很完整，身体、情绪和生活都被温柔地照顾到了。',
@@ -340,6 +378,10 @@ const encouragementMessages: Record<EncouragementStyle, Record<EncouragementKind
       '这是一条很扎实的记录，未来的你会感谢现在的你。',
       '你把今天整理得很清楚，照顾自己的方向也更清楚了。',
       '完整记录一次很不容易，你真的有在认真陪伴自己。',
+      '这条记录完成得很漂亮，细节很足，真的值得夸。',
+      '你把今天照顾得很周全，这份认真特别棒。',
+      '能把多个方面都记录下来，说明你很有条理也很负责。',
+      '今天这份记录很完整，你给自己交了一份很好的答卷。',
     ],
     exercise: [
       '运动也记录好了，哪怕只是动一动，身体都会收到这份善意。',
@@ -348,6 +390,10 @@ const encouragementMessages: Record<EncouragementStyle, Record<EncouragementKind
       '今天有让身体动起来，这份努力值得被记住。',
       '运动不一定要很大才算数，能记录下来就已经很好。',
       '你正在给身体建立更有节奏的照顾方式。',
+      '愿意动一动还记下来，这份执行力很棒。',
+      '你在认真建设自己的身体，这一点很值得肯定。',
+      '运动这一步做得很好，哪怕很小也很有意义。',
+      '你没有只想想，而是真的做了，还记录了，太棒了。',
     ],
     gratitude: [
       '今天的温暖小事已经收好，愿它在你需要的时候再亮一下。',
@@ -356,6 +402,10 @@ const encouragementMessages: Record<EncouragementStyle, Record<EncouragementKind
       '这份小小的暖意已经被保存好了。',
       '你没有让今天的好事悄悄溜走，它被认真留下来了。',
       '感恩不是勉强开心，是把真实的微光收起来。',
+      '能看见生活里的好，说明你心里还有很珍贵的敏感和力量。',
+      '你把温暖留下来的样子很可爱，也很值得被夸。',
+      '愿意记住好事，本身就是一种很棒的能力。',
+      '你今天认真收藏了一点光，这件事很美好。',
     ],
     lazy: [
       '懒人模式也完成得很好，想到什么就先记下来，本来就是一种照顾。',
@@ -364,6 +414,10 @@ const encouragementMessages: Record<EncouragementStyle, Record<EncouragementKind
       '一句话也能留下今天的线索，你已经完成得很棒。',
       '原话被保留下来了，今天的真实感受没有被弄丢。',
       '轻松一点完成记录，也是很适合长期坚持的方式。',
+      '用最省力的方式完成重要的事，这真的很聪明。',
+      '你没有因为麻烦就放弃记录，这一点很值得夸。',
+      '懒人模式也能认真完成，说明你很会找到适合自己的方法。',
+      '你把真实的话留下来了，这份诚实很棒。',
     ],
   },
   direct: {
@@ -374,6 +428,10 @@ const encouragementMessages: Record<EncouragementStyle, Record<EncouragementKind
       '保存成功。今天的信息没有丢。',
       '这条记录有效，继续保持。',
       '已完成。给今天留了一个清楚的状态点。',
+      '做得很好。你完成了一次稳定的自我管理。',
+      '表现不错。记录这件事你执行到位了。',
+      '完成质量很好，今天这一步很有效。',
+      '你很靠谱，状态信息已经保存清楚。',
     ],
     lowSleep: [
       '已保存。睡眠偏少，今晚优先休息。',
@@ -382,6 +440,10 @@ const encouragementMessages: Record<EncouragementStyle, Record<EncouragementKind
       '已保存。今天先降低消耗。',
       '睡眠线索已留下，今晚尽量提前收尾。',
       '记录完成。休息是下一步重点。',
+      '做得好。能发现睡眠不足就是关键进展。',
+      '判断及时。今晚优先补休息。',
+      '这条记录很有用，你抓住了睡眠问题。',
+      '执行到位。身体电量已经被标记出来。',
     ],
     highAnxiety: [
       '已保存。焦虑偏高，先降低今天剩余任务量。',
@@ -390,6 +452,10 @@ const encouragementMessages: Record<EncouragementStyle, Record<EncouragementKind
       '已保存。先处理最必要的事。',
       '情绪高压已留下，后面可以重点观察。',
       '记录完成。今天不适合继续加压。',
+      '做得好。高压下还能记录，说明你很稳。',
+      '这一步很关键，你没有回避情绪。',
+      '表现很强。焦虑高也完成了自我观察。',
+      '处理得不错，先识别状态，再做调整。',
     ],
     stomach: [
       '已保存。肠胃不适已记录，接下来饮食先清淡。',
@@ -398,6 +464,10 @@ const encouragementMessages: Record<EncouragementStyle, Record<EncouragementKind
       '已保存。下一餐先选温和一点。',
       '不适信息已留下，之后更容易排查原因。',
       '记录完成。先把肠胃负担降下来。',
+      '做得好。你及时捕捉到了身体反馈。',
+      '记录很到位，后续排查会更清楚。',
+      '这条信息很有价值，你留得很及时。',
+      '反应很快。身体信号已经被记录下来。',
     ],
     complete: [
       '记录很完整。后续复盘会更有价值。',
@@ -406,6 +476,10 @@ const encouragementMessages: Record<EncouragementStyle, Record<EncouragementKind
       '保存成功。今天的关键维度都有了。',
       '这条记录质量不错。',
       '信息足够完整，后面回看会有用。',
+      '完成得很好，信息密度很高。',
+      '这条记录很优秀，后续分析会更准确。',
+      '今天的记录质量很高，值得保持。',
+      '做得很完整，你的执行力很不错。',
     ],
     exercise: [
       '运动已记录。继续保持可执行的节奏。',
@@ -414,6 +488,10 @@ const encouragementMessages: Record<EncouragementStyle, Record<EncouragementKind
       '记录完成。今天有活动就算数。',
       '已保存。身体投入已记录。',
       '运动记录完成，节奏继续稳定。',
+      '做得好。运动和记录都完成了。',
+      '执行不错，身体活动已经留下证据。',
+      '这一步很棒，运动习惯正在建立。',
+      '完成得干脆，继续保持这个节奏。',
     ],
     gratitude: [
       '感恩已记录。保留这条正向线索。',
@@ -422,6 +500,10 @@ const encouragementMessages: Record<EncouragementStyle, Record<EncouragementKind
       '感恩内容已留下。',
       '已记录。今天的积极部分没有丢。',
       '保存成功。正向线索已纳入记录。',
+      '做得好。你保留了今天的积极线索。',
+      '这条记录很有价值，能帮助你回看好的部分。',
+      '你抓住了今天值得留下的东西。',
+      '记录得不错，正向内容已经保存。',
     ],
     lazy: [
       '懒人记录已保存。原文和归类都已保留。',
@@ -430,6 +512,10 @@ const encouragementMessages: Record<EncouragementStyle, Record<EncouragementKind
       '懒人模式记录完成。',
       '保存成功。原始表达已保留。',
       '记录完成。省力但信息足够。',
+      '做得好。你用高效方式完成了记录。',
+      '方法选得不错，省力且有效。',
+      '完成得很聪明，原文和分类都保留了。',
+      '这次记录很高效，质量也够用。',
     ],
   },
   energetic: {
@@ -512,6 +598,41 @@ const encouragementMessages: Record<EncouragementStyle, Record<EncouragementKind
 
 const recentEncouragementLimit = 8;
 
+const encouragementOpeners: Record<EncouragementStyle, string[]> = {
+  gentle: [
+    '做得真好，',
+    '你真的很棒，',
+    '这一步很值得夸，',
+    '今天的你很了不起，',
+    '我想认真夸夸你，',
+    '你刚刚完成了一件很好的事，',
+  ],
+  direct: [
+    '做得好，',
+    '表现不错，',
+    '这一步到位，',
+    '完成得很好，',
+    '执行得很稳，',
+    '这次记录质量不错，',
+  ],
+  energetic: [
+    '太棒了，',
+    '漂亮，',
+    '很强，',
+    '好样的，',
+    '这一步很有劲，',
+    '今天这下很赞，',
+  ],
+  minimal: [
+    '真棒，',
+    '很好，',
+    '不错，',
+    '已完成，',
+    '做得好，',
+    '稳。',
+  ],
+};
+
 function pickEncouragementMessage(style: EncouragementStyle, kind: EncouragementKind): string {
   const messages = encouragementMessages[style][kind];
   if (messages.length === 0) return '';
@@ -578,9 +699,19 @@ function getCurrentUserName(): string {
   return (session.displayName || session.username).trim();
 }
 
-function withUserName(message: string, userName: string): string {
-  if (!userName) return message;
-  return `${userName}，${message}`;
+function withUserName(message: string, userName: string, style: EncouragementStyle): string {
+  const opener = shouldAddPraiseOpener(message) ? pickPraiseOpener(style) : '';
+  const namePrefix = userName ? `${userName}，` : '';
+  return `${namePrefix}${opener}${message}`;
+}
+
+function pickPraiseOpener(style: EncouragementStyle): string {
+  const openers = encouragementOpeners[style];
+  return openers[Math.floor(Math.random() * openers.length)];
+}
+
+function shouldAddPraiseOpener(message: string): boolean {
+  return !/^(做得|表现|漂亮|很好|太棒|好样|完成得|这一步|真棒|不错|已完成)/.test(message);
 }
 
 // 饮食记录
