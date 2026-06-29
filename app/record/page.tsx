@@ -498,7 +498,10 @@ function LazyModeCard({
       const transcript = Array.from({ length: event.results.length }, (_, index) => {
         return event.results[index][0].transcript;
       }).join(' ');
-      setText((current) => `${current}${current ? ' ' : ''}${transcript}`.trim());
+      setText((current) => {
+        const separator = current && !current.endsWith('\n') ? '\n' : '';
+        return `${current}${separator}${transcript}`;
+      });
       setPendingEntry(null);
     };
     recognition.onerror = () => {
@@ -671,7 +674,7 @@ function buildLazyPreview(entry: DailyEntry): string[] {
   }
 
   if (entry.rawText) {
-    preview.push('原文：已保留');
+    preview.push('原文：将按输入框原样保存');
   }
 
   return preview.length > 0 ? preview : ['暂无可预览内容'];
@@ -716,7 +719,8 @@ function entryToLazyTemplate(entry: DailyEntry): string {
 }
 
 function classifyLazyInput(entry: DailyEntry, input: string): { nextEntry: DailyEntry; recognized: string[] } {
-  const text = input.trim();
+  const originalText = input;
+  const text = originalText.trim();
   const compact = text.replace(/\s+/g, ' ');
   const nextEntry: DailyEntry = {
     ...entry,
@@ -728,39 +732,39 @@ function classifyLazyInput(entry: DailyEntry, input: string): { nextEntry: Daily
     rawText: entry.rawText,
   };
   const recognized: string[] = [];
-  nextEntry.rawText = appendRawText(nextEntry.rawText, compact);
+  nextEntry.rawText = appendRawText(nextEntry.rawText, originalText);
 
   if (/吃|喝|早饭|早餐|午饭|午餐|晚饭|晚餐|加餐|零食|宵夜/.test(compact)) {
     nextEntry.diet.push({
       mealType: inferMealType(compact),
       food: extractAfterKeyword(compact, /(早饭|早餐|午饭|午餐|晚饭|晚餐|加餐|零食|宵夜|吃了|喝了|吃|喝)/) || compact.slice(0, 36),
       stomachFeeling: inferStomachFeeling(compact),
-      notes: compact,
+      notes: originalText,
     });
     recognized.push('已归类到饮食');
   }
 
   const mood = inferMood(compact);
   if (mood) {
-    nextEntry.mood = mood;
+    nextEntry.mood = { ...mood, notes: originalText };
     recognized.push('已归类到情绪');
   }
 
   const sleep = inferSleep(compact);
   if (sleep) {
-    nextEntry.sleep = sleep;
+    nextEntry.sleep = { ...sleep, notes: originalText };
     recognized.push('已归类到睡眠');
   }
 
   const period = inferPeriod(compact);
   if (period) {
-    nextEntry.period = period;
+    nextEntry.period = { ...period, symptoms: originalText };
     recognized.push('已归类到生理期');
   }
 
   const exercise = inferExercise(compact);
   if (exercise) {
-    nextEntry.exercise = exercise;
+    nextEntry.exercise = { ...exercise, notes: originalText };
     recognized.push('已归类到运动');
   }
 
@@ -771,7 +775,7 @@ function classifyLazyInput(entry: DailyEntry, input: string): { nextEntry: Daily
   }
 
   if (recognized.length === 0) {
-    nextEntry.gratitude = nextEntry.gratitude ? `${nextEntry.gratitude}\n${compact}` : compact;
+    nextEntry.gratitude = nextEntry.gratitude ? `${nextEntry.gratitude}\n${originalText}` : originalText;
     recognized.push('没有识别出明确类别，已先放到今日感恩');
   }
 
