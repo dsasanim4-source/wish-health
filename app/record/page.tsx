@@ -31,6 +31,13 @@ export default function RecordPage() {
   const today = new Date().toISOString().split('T')[0];
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('mode') === 'lazy') {
+      void Promise.resolve().then(() => setLazyMode(true));
+    }
+  }, []);
+
+  useEffect(() => {
     let isMounted = true;
 
     const draftEntry = () => ({
