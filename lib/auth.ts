@@ -1,6 +1,7 @@
 import { supabase } from './supabase';
 
 const SESSION_KEY = 'wish_health_session';
+const ADMIN_SESSION_KEY = 'wish_health_admin_session';
 
 export type UserSession = {
   mode: 'user';
@@ -29,20 +30,43 @@ export function getAuthSession(): AuthSession | null {
   if (typeof window === 'undefined') return null;
 
   try {
+    const adminRaw = sessionStorage.getItem(ADMIN_SESSION_KEY);
+    if (adminRaw) {
+      const adminSession = JSON.parse(adminRaw) as AuthSession;
+      if (adminSession.mode === 'admin') {
+        return adminSession;
+      }
+    }
+
     const raw = localStorage.getItem(SESSION_KEY);
-    return raw ? JSON.parse(raw) : null;
+    if (!raw) return null;
+
+    const session = JSON.parse(raw) as AuthSession;
+    if (session.mode === 'admin') {
+      localStorage.removeItem(SESSION_KEY);
+      return null;
+    }
+
+    return session;
   } catch {
     return null;
   }
 }
 
 export function setAuthSession(session: AuthSession): void {
-  localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+  if (session.mode === 'admin') {
+    localStorage.removeItem(SESSION_KEY);
+    sessionStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify(session));
+  } else {
+    sessionStorage.removeItem(ADMIN_SESSION_KEY);
+    localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+  }
   window.dispatchEvent(new Event('wish-health-auth-changed'));
 }
 
 export function clearAuthSession(): void {
   localStorage.removeItem(SESSION_KEY);
+  sessionStorage.removeItem(ADMIN_SESSION_KEY);
   window.dispatchEvent(new Event('wish-health-auth-changed'));
 }
 
