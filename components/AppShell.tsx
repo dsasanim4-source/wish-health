@@ -5,7 +5,9 @@ import AdminDashboard from '@/components/AdminDashboard';
 import ChangePasswordPanel from '@/components/ChangePasswordPanel';
 import LoginScreen from '@/components/LoginScreen';
 import Navbar from '@/components/Navbar';
-import { getAuthSession, type AuthSession, type UserSession } from '@/lib/auth';
+import { clearAuthSession, getAuthSession, type AuthSession, type UserSession } from '@/lib/auth';
+
+const ADMIN_IDLE_TIMEOUT_MS = 30 * 60 * 1000;
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<AuthSession | null | undefined>(undefined);
@@ -16,6 +18,35 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     window.addEventListener('wish-health-auth-changed', syncSession);
     return () => window.removeEventListener('wish-health-auth-changed', syncSession);
   }, []);
+
+  useEffect(() => {
+    if (session?.mode !== 'admin') return;
+
+    let timeoutId = window.setTimeout(() => {
+      clearAuthSession();
+      setSession(null);
+    }, ADMIN_IDLE_TIMEOUT_MS);
+
+    const resetTimer = () => {
+      window.clearTimeout(timeoutId);
+      timeoutId = window.setTimeout(() => {
+        clearAuthSession();
+        setSession(null);
+      }, ADMIN_IDLE_TIMEOUT_MS);
+    };
+
+    const events = ['click', 'keydown', 'mousemove', 'scroll', 'touchstart'];
+    events.forEach((eventName) => {
+      window.addEventListener(eventName, resetTimer, { passive: true });
+    });
+
+    return () => {
+      window.clearTimeout(timeoutId);
+      events.forEach((eventName) => {
+        window.removeEventListener(eventName, resetTimer);
+      });
+    };
+  }, [session?.mode]);
 
   if (session === undefined) {
     return (

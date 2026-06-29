@@ -42,6 +42,7 @@ export interface DailyEntry {
   period: PeriodRecord | null;
   exercise: ExerciseRecord | null;
   gratitude: string;
+  rawText?: string;
   createdAt: string;
   updatedAt: string;
 }

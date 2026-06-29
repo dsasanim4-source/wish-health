@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { getEntryByDate, saveEntry, syncEntriesFromSupabase } from '@/lib/storage';
+import { getEntries, getEntryByDate, saveEntry, syncEntriesFromSupabase } from '@/lib/storage';
 import { DailyEntry, DietRecord, MoodRecord, SleepRecord, PeriodRecord, ExerciseRecord } from '@/lib/types';
 import { Coffee, Moon, Heart, Activity, Calendar, Sparkles, Save, X, Check, Mic, MicOff, Wand2 } from 'lucide-react';
 
@@ -99,6 +99,7 @@ export default function RecordPage() {
       period: targetEntry.period,
       exercise: targetEntry.exercise,
       gratitude: targetEntry.gratitude,
+      rawText: targetEntry.rawText,
     });
     setEntry(savedEntry);
     setEncouragement(getEncouragement(savedEntry));
@@ -222,16 +223,68 @@ function LazyModeCard({
   const [text, setText] = useState('');
   const [listening, setListening] = useState(false);
   const [summary, setSummary] = useState<string[]>([]);
+  const [pendingEntry, setPendingEntry] = useState<DailyEntry | null>(null);
+  const [speechSupported, setSpeechSupported] = useState(true);
   const recognitionRef = useRef<BrowserSpeechRecognition | null>(null);
+  const pendingPreview = pendingEntry ? buildLazyPreview(pendingEntry) : [];
 
-  const applyInput = () => {
-    if (!text.trim()) return;
+  useEffect(() => {
+    const speechWindow = window as Window & typeof globalThis & {
+      SpeechRecognition?: new () => BrowserSpeechRecognition;
+      webkitSpeechRecognition?: new () => BrowserSpeechRecognition;
+    };
+    const supported = Boolean(speechWindow.SpeechRecognition || speechWindow.webkitSpeechRecognition);
+    void Promise.resolve().then(() => setSpeechSupported(supported));
+  }, []);
 
+  const updateText = (value: string) => {
+    setText(value);
+    setPendingEntry(null);
+    setSummary([]);
+  };
+
+  const previewInput = () => {
+    if (!text.trim()) {
+      setSummary(['先输入一段今天的记录，再进行归类预览。']);
+      return;
+    }
     const { nextEntry, recognized } = classifyLazyInput(entry, text);
-    setEntry(nextEntry);
-    setSummary(recognized);
+    setPendingEntry(nextEntry);
+    setSummary([...recognized, '请确认预览无误后再保存']);
+  };
+
+  const confirmSave = () => {
+    if (!pendingEntry) {
+      previewInput();
+      return;
+    }
+
+    setEntry(pendingEntry);
+    onSave(pendingEntry);
     setText('');
-    onSave(nextEntry);
+    setPendingEntry(null);
+    setSummary(['已保存']);
+  };
+
+  const loadRecentTemplate = () => {
+    const latest = getEntries()
+      .filter((item) => item.date !== entry.date)
+      .sort((a, b) => b.date.localeCompare(a.date))[0];
+
+    if (!latest) {
+      setSummary(['还没有最近记录可以套用。']);
+      return;
+    }
+
+    const template = entryToLazyTemplate(latest);
+    if (!template) {
+      setSummary(['最近记录内容太少，暂时无法生成模板。']);
+      return;
+    }
+
+    setText(template);
+    setPendingEntry(null);
+    setSummary(['已套用最近一条记录，保存前可以直接修改文字。']);
   };
 
   const toggleSpeech = () => {
@@ -248,6 +301,7 @@ function LazyModeCard({
     const Recognition = speechWindow.SpeechRecognition || speechWindow.webkitSpeechRecognition;
 
     if (!Recognition) {
+      setSpeechSupported(false);
       setSummary(['当前浏览器不支持语音转文字，可以直接打字输入。']);
       return;
     }
@@ -261,6 +315,7 @@ function LazyModeCard({
         return event.results[index][0].transcript;
       }).join(' ');
       setText((current) => `${current}${current ? ' ' : ''}${transcript}`.trim());
+      setPendingEntry(null);
     };
     recognition.onerror = () => {
       setSummary(['语音识别没有成功，可以再点一次麦克风或直接输入。']);
@@ -284,22 +339,31 @@ function LazyModeCard({
             一个框里随便写，系统会自动归到饮食、情绪、睡眠、生理期、运动和今日感恩。
           </p>
         </div>
-        <button
-          type="button"
-          onClick={toggleSpeech}
-          className={`btn-secondary flex items-center justify-center gap-2 ${listening ? 'bg-blush/10 text-blush-dark border-blush' : ''}`}
-        >
-          {listening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
-          {listening ? '停止听写' : '语音输入'}
-        </button>
+        <div className="flex flex-col sm:flex-row gap-2">
+          <button type="button" onClick={loadRecentTemplate} className="btn-secondary">
+            套用最近模板
+          </button>
+          <button
+            type="button"
+            onClick={toggleSpeech}
+            disabled={!speechSupported}
+            className={`btn-secondary flex items-center justify-center gap-2 disabled:opacity-60 ${listening ? 'bg-blush/10 text-blush-dark border-blush' : ''}`}
+          >
+            {listening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+            {listening ? '停止听写' : '语音输入'}
+          </button>
+        </div>
       </div>
 
       <textarea
         className="input-field resize-none min-h-[180px]"
         value={text}
-        onChange={(event) => setText(event.target.value)}
+        onChange={(event) => updateText(event.target.value)}
         placeholder="照着说就行：早饭喝了小米粥，胃有点胀；今天心情焦虑 4 分；昨晚睡了 6 小时，质量一般；生理期第 2 天，量中等；散步 20 分钟；今天感谢朋友陪我聊天。"
       />
+      <p className="mt-2 text-xs text-text-secondary">
+        {speechSupported ? '语音输入会把识别结果追加到文本框，确认前都可以修改。' : '当前浏览器不支持语音转文字，可以直接打字输入。'}
+      </p>
 
       <div className="grid md:grid-cols-3 gap-2 mt-3 text-xs text-text-secondary">
         <div className="rounded-xl bg-warm-beige/40 p-3">饮食：吃了什么，胃舒服吗</div>
@@ -316,15 +380,32 @@ function LazyModeCard({
         </div>
       )}
 
+      {pendingEntry && (
+        <div className="mt-4 border-t border-warm-beige pt-4">
+          <h3 className="text-sm font-semibold text-text-primary mb-3">归类预览</h3>
+          <div className="grid md:grid-cols-2 gap-2 text-sm text-text-secondary">
+            {pendingPreview.map((item) => (
+              <div key={item} className="rounded-xl bg-white/60 px-3 py-2">
+                {item}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="flex flex-col md:flex-row gap-2 mt-4">
-        <button className="btn-primary flex-1" onClick={applyInput}>
-          归类并保存
+        <button className="btn-secondary flex-1" onClick={previewInput}>
+          预览归类
+        </button>
+        <button className="btn-primary flex-1" onClick={confirmSave}>
+          确认保存
         </button>
         <button
           className="btn-secondary"
           onClick={() => {
             setText('');
             setSummary([]);
+            setPendingEntry(null);
           }}
         >
           清空
@@ -332,6 +413,122 @@ function LazyModeCard({
       </div>
     </div>
   );
+}
+
+const lazyMealLabels: Record<DietRecord['mealType'], string> = {
+  breakfast: '早餐',
+  lunch: '午餐',
+  dinner: '晚餐',
+  snack: '加餐',
+};
+
+const lazyStomachLabels: Record<DietRecord['stomachFeeling'], string> = {
+  good: '很好',
+  okay: '还好',
+  uncomfortable: '不舒服',
+  pain: '疼痛',
+};
+
+const lazyMoodLabels: Record<MoodRecord['mood'], string> = {
+  happy: '开心',
+  calm: '平静',
+  neutral: '一般',
+  anxious: '焦虑',
+  sad: '难过',
+  overwhelmed: '压力大',
+};
+
+const lazySleepLabels: Record<SleepRecord['quality'], string> = {
+  excellent: '很好',
+  good: '不错',
+  fair: '一般',
+  poor: '很差',
+};
+
+const lazyFlowLabels: Record<PeriodRecord['flow'], string> = {
+  spotting: '点滴',
+  light: '量少',
+  medium: '中等',
+  heavy: '量大',
+};
+
+const lazyIntensityLabels: Record<ExerciseRecord['intensity'], string> = {
+  light: '轻度',
+  moderate: '中度',
+  vigorous: '剧烈',
+};
+
+function buildLazyPreview(entry: DailyEntry): string[] {
+  const preview: string[] = [];
+
+  if (entry.diet.length > 0) {
+    preview.push(`饮食：${entry.diet.map((item) => `${lazyMealLabels[item.mealType]} ${item.food}`).join('；')}`);
+  }
+
+  if (entry.mood) {
+    preview.push(`情绪：${lazyMoodLabels[entry.mood.mood]}，焦虑 ${entry.mood.anxietyLevel}/5`);
+  }
+
+  if (entry.sleep) {
+    preview.push(`睡眠：${entry.sleep.hours} 小时，质量${lazySleepLabels[entry.sleep.quality]}`);
+  }
+
+  if (entry.period) {
+    const day = entry.period.day === 'none' ? '无' : `D${entry.period.day}`;
+    preview.push(`生理期：${day}，流量${lazyFlowLabels[entry.period.flow]}`);
+  }
+
+  if (entry.exercise) {
+    preview.push(`运动：${entry.exercise.type || '运动'} ${entry.exercise.duration} 分钟，${lazyIntensityLabels[entry.exercise.intensity]}`);
+  }
+
+  if (entry.gratitude) {
+    preview.push(`今日感恩：${entry.gratitude.split('\n').slice(-1)[0]}`);
+  }
+
+  if (entry.rawText) {
+    preview.push('原文：已保留');
+  }
+
+  return preview.length > 0 ? preview : ['暂无可预览内容'];
+}
+
+function entryToLazyTemplate(entry: DailyEntry): string {
+  const parts: string[] = [];
+
+  if (entry.diet.length > 0) {
+    parts.push(entry.diet.map((item) => {
+      const note = item.notes ? `，备注 ${item.notes}` : '';
+      return `${lazyMealLabels[item.mealType]}吃了${item.food}，胃${lazyStomachLabels[item.stomachFeeling]}${note}`;
+    }).join('；'));
+  }
+
+  if (entry.mood) {
+    const note = entry.mood.notes ? `，${entry.mood.notes}` : '';
+    parts.push(`今天心情${lazyMoodLabels[entry.mood.mood]}，焦虑 ${entry.mood.anxietyLevel} 分${note}`);
+  }
+
+  if (entry.sleep) {
+    const note = entry.sleep.notes ? `，${entry.sleep.notes}` : '';
+    parts.push(`睡了 ${entry.sleep.hours} 小时，睡眠质量${lazySleepLabels[entry.sleep.quality]}${note}`);
+  }
+
+  if (entry.period) {
+    const day = entry.period.day === 'none' ? '无生理期' : `生理期第 ${entry.period.day} 天`;
+    const note = entry.period.symptoms ? `，${entry.period.symptoms}` : '';
+    parts.push(`${day}，流量${lazyFlowLabels[entry.period.flow]}${note}`);
+  }
+
+  if (entry.exercise) {
+    const note = entry.exercise.notes ? `，${entry.exercise.notes}` : '';
+    parts.push(`${entry.exercise.type || '运动'} ${entry.exercise.duration} 分钟，强度${lazyIntensityLabels[entry.exercise.intensity]}${note}`);
+  }
+
+  if (entry.gratitude) {
+    parts.push(`今天感谢${entry.gratitude.split('\n').slice(-1)[0]}`);
+  }
+
+  return parts.join('；') || entry.rawText || '';
 }
 
 function classifyLazyInput(entry: DailyEntry, input: string): { nextEntry: DailyEntry; recognized: string[] } {
@@ -344,8 +541,10 @@ function classifyLazyInput(entry: DailyEntry, input: string): { nextEntry: Daily
     sleep: entry.sleep ? { ...entry.sleep } : null,
     period: entry.period ? { ...entry.period } : null,
     exercise: entry.exercise ? { ...entry.exercise } : null,
+    rawText: entry.rawText,
   };
   const recognized: string[] = [];
+  nextEntry.rawText = appendRawText(nextEntry.rawText, compact);
 
   if (/吃|喝|早饭|早餐|午饭|午餐|晚饭|晚餐|加餐|零食|宵夜/.test(compact)) {
     nextEntry.diet.push({
@@ -393,6 +592,10 @@ function classifyLazyInput(entry: DailyEntry, input: string): { nextEntry: Daily
   }
 
   return { nextEntry, recognized };
+}
+
+function appendRawText(current: string | undefined, input: string): string {
+  return [current, input].filter(Boolean).join('\n');
 }
 
 function extractAfterKeyword(text: string, keyword: RegExp): string {

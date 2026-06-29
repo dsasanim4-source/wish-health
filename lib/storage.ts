@@ -14,6 +14,7 @@ type DailyEntryRow = {
   period: PeriodRecord | null;
   exercise: ExerciseRecord | null;
   gratitude: string | null;
+  raw_text: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -53,6 +54,7 @@ function toRow(entry: DailyEntry): DailyEntryRow {
     period: entry.period,
     exercise: entry.exercise,
     gratitude: entry.gratitude,
+    raw_text: entry.rawText || null,
     created_at: entry.createdAt,
     updated_at: entry.updatedAt,
   };
@@ -68,6 +70,7 @@ function fromRow(row: DailyEntryRow): DailyEntry {
     period: row.period,
     exercise: row.exercise,
     gratitude: row.gratitude || '',
+    rawText: row.raw_text || undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };

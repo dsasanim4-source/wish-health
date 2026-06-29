@@ -49,6 +49,10 @@ export default function LoginScreen({ onLogin }: { onLogin: (session: AuthSessio
           </div>
         </div>
 
+        <p className="mb-5 rounded-xl bg-warm-beige/40 px-4 py-3 text-xs leading-relaxed text-text-secondary">
+          记录会保存到 Supabase 云端，管理员可查看用户记录内容，用于分配账号和必要的记录管理。
+        </p>
+
         <div className="space-y-4">
           <div>
             <label className="text-sm font-medium text-text-secondary mb-1 block">用户名</label>
