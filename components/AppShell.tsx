@@ -5,6 +5,7 @@ import AdminDashboard from '@/components/AdminDashboard';
 import ChangePasswordPanel from '@/components/ChangePasswordPanel';
 import LoginScreen from '@/components/LoginScreen';
 import Navbar from '@/components/Navbar';
+import ReminderCenter from '@/components/ReminderCenter';
 import { clearAuthSession, getAuthSession, type AuthSession, type UserSession } from '@/lib/auth';
 
 const ADMIN_IDLE_TIMEOUT_MS = 30 * 60 * 1000;
@@ -74,6 +75,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       {session.mustChangePassword && (
         <ChangePasswordPanel session={session} onChanged={updateUserSession} />
       )}
+      <ReminderCenter session={session} />
       {children}
     </>
   );
