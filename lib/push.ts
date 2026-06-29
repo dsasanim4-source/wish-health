@@ -43,10 +43,7 @@ export async function subscribeToPushReminders(sessionToken: string): Promise<Pu
 
   const registration = await getServiceWorkerRegistration();
   const existing = await registration.pushManager.getSubscription();
-  const subscription = existing || await registration.pushManager.subscribe({
-    userVisibleOnly: true,
-    applicationServerKey: urlBase64ToUint8Array(vapidPublicKey),
-  });
+  const subscription = existing || await createPushSubscription(registration);
 
   const { error } = await supabase.rpc('app_save_push_subscription', {
     p_session_token: sessionToken,
@@ -93,6 +90,17 @@ async function getServiceWorkerRegistration(): Promise<ServiceWorkerRegistration
   return registration;
 }
 
+async function createPushSubscription(registration: ServiceWorkerRegistration): Promise<PushSubscription> {
+  try {
+    return await registration.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(vapidPublicKey),
+    });
+  } catch (error) {
+    throw new Error(getPushRegistrationFailureMessage(error));
+  }
+}
+
 function getBasePath(): string {
   return window.location.pathname.startsWith('/wish-health') ? '/wish-health' : '';
 }
@@ -112,6 +120,42 @@ function getUnsupportedPushMessage(): string {
   }
 
   return '当前浏览器不支持可靠推送，请换用最新版 Chrome、Edge 或 Safari 后再试';
+}
+
+function getPushRegistrationFailureMessage(error: unknown): string {
+  const details = getNativeErrorDetails(error);
+  const normalizedDetails = details.toLowerCase();
+
+  if (normalizedDetails.includes('no sender id')) {
+    return `推送注册失败：浏览器没有识别到推送发送者信息，请刷新页面后再试。技术信息：${details}`;
+  }
+
+  if (
+    normalizedDetails.includes('push service')
+    || normalizedDetails.includes('registration failed')
+    || normalizedDetails.includes('aborterror')
+  ) {
+    return `推送注册失败：浏览器没有连上自己的推送服务。Chrome/Edge 在中国大陆网络环境下比较容易出现这个问题，可以换 Safari 添加到主屏幕，或后续改接微信/短信提醒。技术信息：${details}`;
+  }
+
+  if (normalizedDetails.includes('notallowederror') || normalizedDetails.includes('permission')) {
+    return '推送注册失败：浏览器通知权限没有放行，请在网站设置里允许通知后重试。';
+  }
+
+  if (normalizedDetails.includes('invalid') || normalizedDetails.includes('applicationserverkey')) {
+    return `推送注册失败：浏览器没有接受推送公钥，请刷新页面后重试。技术信息：${details}`;
+  }
+
+  return `推送注册失败：${details}`;
+}
+
+function getNativeErrorDetails(error: unknown): string {
+  if (error instanceof Error) {
+    return [error.name, error.message].filter(Boolean).join(': ');
+  }
+
+  if (typeof error === 'string') return error;
+  return '未知浏览器错误';
 }
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
