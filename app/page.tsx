@@ -1,12 +1,19 @@
 'use client';
 
 import Link from 'next/link';
+import { useEffect, useMemo, useState } from 'react';
 import { Heart, PenSquare, TrendingUp, Calendar, Sparkles, Coffee, Moon, Smile, Activity } from 'lucide-react';
-import { getEntries, getStats } from '@/lib/storage';
+import { getEntries, getStats, syncEntriesFromSupabase } from '@/lib/storage';
+import { DailyEntry } from '@/lib/types';
 
 export default function HomePage() {
-  const entries = getEntries();
-  const stats = getStats();
+  const [entries, setEntries] = useState<DailyEntry[]>([]);
+  const stats = useMemo(() => getStats(entries), [entries]);
+
+  useEffect(() => {
+    setEntries(getEntries());
+    syncEntriesFromSupabase().then(setEntries);
+  }, []);
   const today = new Date().toLocaleDateString('zh-CN', {
     year: 'numeric',
     month: 'long',

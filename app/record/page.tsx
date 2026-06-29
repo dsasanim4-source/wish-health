@@ -9,6 +9,7 @@ export default function RecordPage() {
   const [entry, setEntry] = useState<DailyEntry | null>(null);
   const [activeTab, setActiveTab] = useState<'diet' | 'mood' | 'sleep' | 'period' | 'exercise'>('diet');
   const [saved, setSaved] = useState(false);
+  const [encouragement, setEncouragement] = useState('');
 
   const today = new Date().toISOString().split('T')[0];
 
@@ -41,6 +42,30 @@ export default function RecordPage() {
 
   if (!entry) return null;
 
+  const getEncouragement = (savedEntry: DailyEntry) => {
+    const messages = [
+      '你又认真照顾了自己一次，这件小事很珍贵。',
+      '谢谢你把今天交给记录，慢慢来已经很好了。',
+      '今天的你也在努力生活，给自己一点温柔的掌声。',
+      '记录不是打分，是陪你看见自己。你做得很好。',
+      '又完成一次健康记录，身体会记得这份耐心。',
+    ];
+
+    if (savedEntry.sleep && savedEntry.sleep.hours < 6) {
+      return '今天睡得有点少，已经记录下来了，今晚尽量早点休息，好好把电充回来。';
+    }
+
+    if (savedEntry.mood && savedEntry.mood.anxietyLevel >= 4) {
+      return '焦虑被看见以后，就不再是一个人扛着它了。先慢慢呼吸，你已经做得很棒。';
+    }
+
+    if (savedEntry.diet.some((item) => item.stomachFeeling === 'pain' || item.stomachFeeling === 'uncomfortable')) {
+      return '肠胃不舒服也被认真记下来了，接下来给自己一点清淡和温热。';
+    }
+
+    return messages[Math.floor(Math.random() * messages.length)];
+  };
+
   const handleSave = () => {
     const savedEntry = saveEntry({
       date: entry.date,
@@ -52,6 +77,7 @@ export default function RecordPage() {
       gratitude: entry.gratitude,
     });
     setEntry(savedEntry);
+    setEncouragement(getEncouragement(savedEntry));
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };
@@ -80,6 +106,12 @@ export default function RecordPage() {
             {saved ? '已保存' : '保存'}
           </button>
         </div>
+
+        {encouragement && (
+          <div className="mb-6 rounded-2xl bg-sage/15 text-sage-dark px-4 py-3 text-sm font-medium">
+            {encouragement}
+          </div>
+        )}
 
         {/* Tabs */}
         <div className="flex gap-2 mb-6 overflow-x-auto pb-2">

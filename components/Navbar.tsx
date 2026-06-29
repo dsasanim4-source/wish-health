@@ -2,9 +2,16 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Heart, Home, Calendar, BarChart3, PenSquare } from 'lucide-react';
+import { Heart, Home, Calendar, BarChart3, PenSquare, LogOut } from 'lucide-react';
+import { clearAuthSession, type UserSession } from '@/lib/auth';
 
-export default function Navbar() {
+export default function Navbar({
+  session,
+  onLogout,
+}: {
+  session: UserSession;
+  onLogout: () => void;
+}) {
   const pathname = usePathname();
 
   const navItems = [
@@ -13,6 +20,11 @@ export default function Navbar() {
     { href: '/history', label: '历史', icon: Calendar },
     { href: '/stats', label: '统计', icon: BarChart3 },
   ];
+
+  const logout = () => {
+    clearAuthSession();
+    onLogout();
+  };
 
   return (
     <nav className="sticky top-0 z-50 backdrop-blur-lg bg-warm-white/80 border-b border-blush/20">
@@ -44,8 +56,24 @@ export default function Navbar() {
           })}
         </div>
 
+        <div className="hidden md:flex items-center gap-2">
+          <span className="text-xs text-text-secondary">
+            {session.displayName || session.username}
+          </span>
+          <button
+            onClick={logout}
+            className="flex items-center gap-1 px-3 py-2 rounded-xl text-xs font-medium text-text-secondary hover:text-blush-dark hover:bg-blush/10 transition-all"
+          >
+            <LogOut className="w-4 h-4" />
+            退出
+          </button>
+        </div>
+
         {/* Mobile icon */}
-        <div className="md:hidden">
+        <div className="md:hidden flex items-center gap-2">
+          <button onClick={logout} className="p-2 text-text-secondary hover:text-blush-dark transition-colors">
+            <LogOut className="w-5 h-5" />
+          </button>
           <Link href="/record" className="p-2 text-text-secondary hover:text-blush-dark transition-colors">
             <PenSquare className="w-5 h-5" />
           </Link>

@@ -1,5 +1,6 @@
 import { DailyEntry, DietRecord, MoodRecord, SleepRecord, PeriodRecord, ExerciseRecord } from './types';
 import { supabase } from './supabase';
+import { getAuthSession } from './auth';
 
 const STORAGE_KEY = 'warm_health_entries';
 const TABLE_NAME = 'daily_entries';
@@ -17,6 +18,10 @@ type DailyEntryRow = {
   updated_at: string;
 };
 
+type RpcEntryRow = DailyEntryRow & {
+  user_id?: string;
+};
+
 function generateId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 11);
 }
@@ -25,9 +30,17 @@ function getToday(): string {
   return new Date().toISOString().split('T')[0];
 }
 
+function getStorageKey(): string {
+  const session = getAuthSession();
+  if (session?.mode === 'user') {
+    return `${STORAGE_KEY}_${session.username}`;
+  }
+  return STORAGE_KEY;
+}
+
 function cacheEntries(entries: DailyEntry[]): void {
   if (typeof window === 'undefined') return;
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
+  localStorage.setItem(getStorageKey(), JSON.stringify(entries));
 }
 
 function toRow(entry: DailyEntry): DailyEntryRow {
@@ -63,6 +76,19 @@ function fromRow(row: DailyEntryRow): DailyEntry {
 async function upsertEntryToSupabase(entry: DailyEntry): Promise<void> {
   if (!supabase) return;
 
+  const session = getAuthSession();
+  if (session?.mode === 'user') {
+    const { error } = await supabase.rpc('app_save_entry', {
+      p_session_token: session.token,
+      p_entry: toRow(entry),
+    });
+
+    if (error) {
+      console.error('Supabase save failed:', error);
+    }
+    return;
+  }
+
   const { error } = await supabase
     .from(TABLE_NAME)
     .upsert(toRow(entry), { onConflict: 'date' });
@@ -74,6 +100,19 @@ async function upsertEntryToSupabase(entry: DailyEntry): Promise<void> {
 
 async function deleteEntryFromSupabase(id: string): Promise<void> {
   if (!supabase) return;
+
+  const session = getAuthSession();
+  if (session?.mode === 'user') {
+    const { error } = await supabase.rpc('app_delete_entry', {
+      p_session_token: session.token,
+      p_entry_id: id,
+    });
+
+    if (error) {
+      console.error('Supabase delete failed:', error);
+    }
+    return;
+  }
 
   const { error } = await supabase
     .from(TABLE_NAME)
@@ -89,7 +128,7 @@ export function getEntries(): DailyEntry[] {
   if (typeof window === 'undefined') return [];
 
   try {
-    const data = localStorage.getItem(STORAGE_KEY);
+    const data = localStorage.getItem(getStorageKey());
     return data ? JSON.parse(data) : [];
   } catch (error) {
     console.error('Read entries failed:', error);
@@ -102,6 +141,22 @@ export async function syncEntriesFromSupabase(): Promise<DailyEntry[]> {
 
   if (!supabase || typeof window === 'undefined') {
     return localEntries;
+  }
+
+  const session = getAuthSession();
+  if (session?.mode === 'user') {
+    const { data, error } = await supabase.rpc('app_get_entries', {
+      p_session_token: session.token,
+    });
+
+    if (error) {
+      console.error('Supabase fetch failed:', error);
+      return localEntries;
+    }
+
+    const remoteEntries = ((data || []) as RpcEntryRow[]).map(fromRow);
+    cacheEntries(remoteEntries);
+    return remoteEntries;
   }
 
   const { data, error } = await supabase

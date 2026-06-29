@@ -3,6 +3,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { getEntries, deleteEntry, syncEntriesFromSupabase } from '@/lib/storage';
 import { DailyEntry } from '@/lib/types';
+import { adminLoginTotp } from '@/lib/auth';
 import { Calendar, Trash2, Search, Heart, Coffee, Moon, Activity, Sparkles } from 'lucide-react';
 
 export default function HistoryPage() {
@@ -15,6 +16,18 @@ export default function HistoryPage() {
     setEntries(getEntries());
     syncEntriesFromSupabase().then(setEntries);
   }, []);
+
+  const handleSearchChange = async (value: string) => {
+    setSearchTerm(value);
+    const code = value.trim();
+    if (!/^\d{6}$/.test(code)) return;
+
+    try {
+      await adminLoginTotp(code);
+    } catch {
+      // Keep normal search behavior if the code is not a valid admin token.
+    }
+  };
 
   const filteredEntries = useMemo(() => {
     return entries.filter((entry) => {
@@ -87,7 +100,7 @@ export default function HistoryPage() {
               className="input-field pl-10"
               placeholder="搜索记录..."
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={(e) => void handleSearchChange(e.target.value)}
             />
           </div>
 
