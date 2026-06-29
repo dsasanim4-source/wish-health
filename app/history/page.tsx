@@ -10,10 +10,9 @@ export default function HistoryPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState<'all' | 'diet' | 'mood' | 'sleep' | 'period' | 'exercise'>('all');
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
-  const [entries, setEntries] = useState<DailyEntry[]>([]);
+  const [entries, setEntries] = useState<DailyEntry[]>(() => getEntries());
 
   useEffect(() => {
-    setEntries(getEntries());
     syncEntriesFromSupabase().then(setEntries);
   }, []);
 

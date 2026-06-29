@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { getEntries, getStats, syncEntriesFromSupabase } from '@/lib/storage';
 import { DailyEntry } from '@/lib/types';
-import { BarChart3, TrendingUp, Calendar, Heart, Coffee, Moon, Activity, Sparkles, Shield } from 'lucide-react';
+import { BarChart3, TrendingUp, Calendar, Heart, Coffee, Moon, Sparkles, Shield } from 'lucide-react';
 import {
   LineChart,
   Line,
@@ -20,10 +20,9 @@ import {
 } from 'recharts';
 
 export default function StatsPage() {
-  const [entries, setEntries] = useState<DailyEntry[]>([]);
+  const [entries, setEntries] = useState<DailyEntry[]>(() => getEntries());
 
   useEffect(() => {
-    setEntries(getEntries());
     syncEntriesFromSupabase().then(setEntries);
   }, []);
 

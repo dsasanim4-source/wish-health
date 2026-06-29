@@ -7,11 +7,10 @@ import { getEntries, getStats, syncEntriesFromSupabase } from '@/lib/storage';
 import { DailyEntry } from '@/lib/types';
 
 export default function HomePage() {
-  const [entries, setEntries] = useState<DailyEntry[]>([]);
+  const [entries, setEntries] = useState<DailyEntry[]>(() => getEntries());
   const stats = useMemo(() => getStats(entries), [entries]);
 
   useEffect(() => {
-    setEntries(getEntries());
     syncEntriesFromSupabase().then(setEntries);
   }, []);
   const today = new Date().toLocaleDateString('zh-CN', {

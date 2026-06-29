@@ -39,7 +39,7 @@ export default function AdminDashboard({ onLogout }: { onLogout: () => void }) {
   };
 
   useEffect(() => {
-    void loadData();
+    void Promise.resolve().then(loadData);
   }, []);
 
   const filteredRecords = useMemo(() => {
